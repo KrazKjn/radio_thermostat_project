@@ -1,0 +1,55 @@
+import React from "react";
+import { View, Text, TouchableOpacity } from "react-native";
+import commonStyles from "../styles/commonStyles";
+
+const ThermostatToggle = ({ thermostatIp, TempMode, onToggle }) => (
+    <View style={[commonStyles.digitalCard, { marginBottom: 0, padding: 16 }]}>
+        <Text style={commonStyles.digitalLabel}>Mode</Text>
+        <View style={{ flexDirection: "row", justifyContent: "center", marginTop: 10 }}>
+            <TouchableOpacity
+                style={[
+                    commonStyles.digitalButton,
+                    TempMode === 1 && commonStyles.digitalActiveButton
+                ]}
+                onPress={() => onToggle(1)}
+            >
+                <Text style={[
+                    commonStyles.digitalButtonText,
+                    TempMode === 1 && commonStyles.digitalActiveButtonText
+                ]}>
+                    Heat
+                </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={[
+                    commonStyles.digitalButton,
+                    TempMode === 2 && commonStyles.digitalActiveButton
+                ]}
+                onPress={() => onToggle(2)}
+            >
+                <Text style={[
+                    commonStyles.digitalButtonText,
+                    TempMode === 2 && commonStyles.digitalActiveButtonText
+                ]}>
+                    Cool
+                </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={[
+                    commonStyles.digitalButton,
+                    TempMode === 0 && commonStyles.digitalActiveButton
+                ]}
+                onPress={() => onToggle(0)}
+            >
+                <Text style={[
+                    digitalButtonText,
+                    TempMode === 0 && commonStyles.digitalActiveButtonText
+                ]}>
+                    Off
+                </Text>
+            </TouchableOpacity>
+        </View>
+    </View>
+);
+
+export default ThermostatToggle;

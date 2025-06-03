@@ -4,7 +4,7 @@ const db = new Database('thermostat_data.db');
 // Create tables if they don't exist
 db.exec(`
 -- HVAC Thermostats
-CREATE TABLE thermostats (
+CREATE TABLE IF NOT EXISTS thermostats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uuid TEXT UNIQUE NOT NULL,       -- Unique identifier (MAC/IP/Custom ID)
     ip TEXT UNIQUE,                  -- Optional: Store IP separately
@@ -17,12 +17,26 @@ CREATE TABLE thermostats (
     created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
 );
 
-CREATE INDEX idx_thermostats_uuid ON thermostats(uuid);
+CREATE INDEX IF NOT EXISTS idx_thermostats_uuid ON thermostats(uuid);
+`);
+
+db.exec(`
+-- Create users table
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 `);
 
 db.exec(`
 -- HVAC Scan Data
-CREATE TABLE scan_data (
+CREATE TABLE IF NOT EXISTS scan_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     thermostat_id INTEGER NOT NULL,   -- Reference thermostats table
     timestamp INTEGER NOT NULL,        -- Unix timestamp (milliseconds)
@@ -33,11 +47,11 @@ CREATE TABLE scan_data (
     fstate INTEGER,                    -- Fan state
     FOREIGN KEY (thermostat_id) REFERENCES thermostats(id)
 );
-CREATE INDEX idx_scan_data_thermostat ON scan_data(thermostat_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_scan_data_thermostat ON scan_data(thermostat_id, timestamp);
 `);
 
 db.exec(`
-CREATE VIEW thermostat_readings AS
+CREATE VIEW IF NOT EXISTS thermostat_readings AS
 SELECT sd.timestamp, t.uuid, t.ip, t.location, sd.temp, sd.tmode, sd.tTemp, sd.tstate, sd.fstate
 FROM scan_data sd
 JOIN thermostats t ON sd.thermostat_id = t.id;
@@ -45,7 +59,7 @@ JOIN thermostats t ON sd.thermostat_id = t.id;
 
 db.exec(`
 -- HVAC Events
-CREATE TABLE hvac_events (
+CREATE TABLE IF NOT EXISTS hvac_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     thermostat_id INTEGER NOT NULL,
     event_time INTEGER NOT NULL,  -- Unix timestamp (milliseconds)
@@ -62,7 +76,7 @@ CREATE TABLE hvac_events (
 `);
 
 db.exec(`
-CREATE TRIGGER track_hvac_changes
+CREATE TRIGGER IF NOT EXISTS track_hvac_changes
 AFTER INSERT ON scan_data
 FOR EACH ROW
 WHEN EXISTS (
@@ -93,7 +107,7 @@ END;
 `);
 
 db.exec(`
-CREATE VIEW hvac_summary AS
+CREATE VIEW IF NOT EXISTS hvac_summary AS
 SELECT h.event_time, t.uuid, t.ip, t.location,
        h.prev_temp, h.new_temp,
        h.prev_tmode, h.new_tmode,

@@ -14,11 +14,6 @@ const snmp = require("net-snmp");
 const app = express();
 const SECRET_KEY = "your_secret_key"; // Use a strong key in production
 
-// Simulated user database
-const users = [
-  { id: "1", username: "admin", email: "admin@example.com", password: bcrypt.hashSync("samplepassword", 10), role: "admin" },
-];
-
 const optionsSNMP = {
     timeout: 1000, // Timeout in milliseconds (1 second)
     retries: 2,    // Number of retry attempts
@@ -205,9 +200,33 @@ async function lookupMac(mac) {
     }
 }
 
-app.post("/login", (req, res) => {
+app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  const user = users.find((u) => u.username === username);
+  const row = db.prepare('SELECT COUNT(*) as count FROM users').get();
+  if (row.count === 0) {
+    // No users exist, create the first admin user
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const stmt = db.prepare(`
+      INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)
+    `);
+    console.log(`Creating first admin user. username: ${username}, email: ${username}@test.net, password: ${hashedPassword}, role: admin`);
+    stmt.run(
+        username,
+        `${username}@test.net`,
+        hashedPassword,
+        'admin'
+    );        
+  }
+  const getUserStmt = db.prepare(`
+    SELECT * FROM users WHERE username = ?;
+  `);
+
+  const user = getUserStmt.get(username);
+  if (!user) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  //const user = users.find((u) => u.username === username);
 
   if (!user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ error: "Invalid credentials" });

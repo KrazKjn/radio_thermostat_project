@@ -207,18 +207,18 @@ app.post("/login", async (req, res) => {
     // No users exist, create the first admin user
     const hashedPassword = await bcrypt.hash(password, 10);
     const stmt = db.prepare(`
-      INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)
+      INSERT INTO users (username, email, password, roleId) VALUES (?, ?, ?, ?)
     `);
     console.log(`Creating first admin user. username: ${username}, email: ${username}@test.net, password: ${hashedPassword}, role: admin`);
     stmt.run(
         username,
         `${username}@test.net`,
         hashedPassword,
-        'admin'
-    );        
+        1
+    );
   }
   const getUserStmt = db.prepare(`
-    SELECT * FROM users WHERE username = ?;
+    SELECT * FROM user_authorization WHERE id = ?;
   `);
 
   const user = getUserStmt.get(username);

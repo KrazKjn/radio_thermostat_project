@@ -21,17 +21,65 @@ CREATE INDEX IF NOT EXISTS idx_thermostats_uuid ON thermostats(uuid);
 `);
 
 db.exec(`
+-- Create the roles table
+CREATE TABLE IF NOT EXISTS roles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+-- Create the role_permissions table
+CREATE TABLE IF NOT EXISTS role_permissions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    roleId INTEGER NOT NULL,
+    permission TEXT NOT NULL,
+    FOREIGN KEY (roleId) REFERENCES roles(id)
+);
+CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON role_permissions(roleId);
+CREATE INDEX IF NOT EXISTS idx_role_permissions_permission ON role_permissions(permission);
+-- Insert default roles
+INSERT OR IGNORE INTO roles (name) VALUES ('admin'), ('user'), ('guest');
+-- Insert default permissions
+INSERT OR IGNORE INTO role_permissions (roleId, permission) VALUES
+(1, 'read'), (1, 'write'), (1, 'delete'),
+(2, 'read'), (2, 'write'),
+(3, 'read');
+-- Create indexes for roles and permissions
+CREATE INDEX IF NOT EXISTS idx_roles_name ON roles(name);
+CREATE INDEX IF NOT EXISTS idx_role_permissions_role_permission ON role_permissions(roleId, permission);
+`);
+
+db.exec(`
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
-    role TEXT NOT NULL
+    roleId INTEGER NOT NULL,
+    FOREIGN KEY (roleId) REFERENCES roles(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+`);
+
+db.exec(`
+CREATE VIEW IF NOT EXISTS user_authorization AS
+SELECT users.id, users.username, users.email, roles.name AS role
+FROM users
+JOIN roles ON users.roleId = roles.id;
+`);
+
+db.exec(`
+-- Create user_sessions table
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId INTEGER NOT NULL,
+    sessionToken TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    expiresAt INTEGER NOT NULL,
+    FOREIGN KEY (userId) REFERENCES users(id)
+);
 `);
 
 db.exec(`

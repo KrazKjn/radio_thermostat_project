@@ -847,7 +847,6 @@ export const ThermostatProvider = ({ children }) => {
   };
   
   const addThermostat = async (hostname, tokenOverride, thermostat) => {
-    /* query details, add to DB */
     try {
         const response = await apiFetch(hostname,
             `/thermostats`,
@@ -862,6 +861,44 @@ export const ThermostatProvider = ({ children }) => {
         return response;
     } catch (error) {
         console.error("Error adding thermostat:", error);
+        throw error;
+    }
+  };
+
+  const updateThermostat = async (hostname, tokenOverride, thermostat) => {
+    try {
+        const response = await apiFetch(hostname,
+            `/thermostats/${thermostat.thermostatInfo.ip}`,
+            "PUT",
+            thermostat,
+            tokenOverride ?? token,
+            "Error updating thermostat",
+            "Updating thermostat...",
+            logout
+        );
+        console.log("Thermostat updated successfully:", response);
+        return response;
+    } catch (error) {
+        console.error("Error updating thermostat:", error);
+        throw error;
+    }
+  };
+
+  const disableThermostat = async (hostname, tokenOverride, thermostat) => {
+    try {
+        const response = await apiFetch(hostname,
+            `/thermostats/${thermostat.thermostatInfo.ip}`,
+            "DELETE",
+            thermostat,
+            tokenOverride ?? token,
+            "Error disabling thermostat",
+            "Disabling thermostat...",
+            logout
+        );
+        console.log("Thermostat disabled successfully:", response);
+        return response;
+    } catch (error) {
+        console.error("Error disabling thermostat:", error);
         throw error;
     }
   };
@@ -893,6 +930,8 @@ export const ThermostatProvider = ({ children }) => {
             thermostats,
             getThermostats,
             addThermostat,
+            updateThermostat,
+            disableThermostat,
             scanForThermostats,
             addThermostatInState,
             removeThermostatFromState,

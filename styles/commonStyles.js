@@ -18,6 +18,27 @@ const baseButton = {
     borderRadius: 5,
 };
 
+// Add these at the top of your component file, after imports
+
+const headerStyle = {
+  padding: 8,
+  backgroundColor: '#007BFF',
+  color: '#fff',
+  fontWeight: 'bold',
+  borderRightWidth: 1,
+  borderColor: '#fff',
+  textAlign: 'center',
+};
+
+const cellStyle = {
+  padding: 8,
+  backgroundColor: '#f8f9fa',
+  color: '#333',
+  borderRightWidth: 1,
+  borderColor: '#ccc',
+  textAlign: 'center',
+};
+
 // Refactored Styles
 const commonStyles = StyleSheet.create({
     // Containers
@@ -123,12 +144,9 @@ const commonStyles = StyleSheet.create({
     alignItems: "center",
     marginVertical: 15,
   },
-  saveButton: {
-    backgroundColor: "#007BFF",
-    padding: 10,
-    borderRadius: 8,
-    alignItems: "center",
-  },
+  saveButton: { ...baseButton, backgroundColor: "#007BFF", borderRadius: 8 },
+  usersSaveButton: { ...baseButton, foregroundColor: "#007BFF", backgroundColor: "#333", borderRadius: 8 },
+
   saveText: {
     fontSize: 18,
     fontWeight: "bold",

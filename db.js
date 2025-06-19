@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS thermostats (
     cloudUrl TEXT,                   -- Optional: Cloud URL for remote access
     scanMode INTEGER DEFAULT 0 NOT NULL CHECK (scanMode IN (0, 1, 2)), -- Scan mode (0 = off, 1 = Scanned, 2 = Cloud)
     cloudAuthkey TEXT,               -- Cloud authentication key
+    enabled BOOLEAN DEFAULT 1,       -- New field to enable/disable thermostat
     created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
 );
 
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
     roleId INTEGER NOT NULL,
+    enabled BOOLEAN DEFAULT 1, -- New field to enable/disable user
     FOREIGN KEY (roleId) REFERENCES roles(id)
 );
 
@@ -65,7 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 db.exec(`
 CREATE VIEW IF NOT EXISTS user_authorization AS
-SELECT users.id, users.username, users.email, roles.name AS role
+SELECT users.id, users.username, users.email, users.password, roles.name AS role
 FROM users
 JOIN roles ON users.roleId = roles.id;
 `);
@@ -164,5 +166,20 @@ SELECT h.event_time, t.uuid, t.ip, t.location,
 FROM hvac_events h
 JOIN thermostats t ON h.thermostat_id = t.id;
 `);
+
+// Check if column exists
+let columns = db.prepare("PRAGMA table_info(thermostats)").all();
+let hasNewField = columns.some(col => col.name === 'enabled');
+
+if (!hasNewField) {
+  db.prepare("ALTER TABLE thermostats ADD COLUMN enabled BOOLEAN DEFAULT 1").run();
+}
+
+columns = db.prepare("PRAGMA table_info(users)").all();
+hasNewField = columns.some(col => col.name === 'enabled');
+
+if (!hasNewField) {
+  db.prepare("ALTER TABLE users ADD COLUMN enabled BOOLEAN DEFAULT 1").run();
+}
 
 module.exports = db;

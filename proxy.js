@@ -110,6 +110,43 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+app.use((req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    try {
+      const payload = jwt.verify(token, SECRET_KEY);
+
+      // Find the session in the database
+      const session = db.prepare('SELECT * FROM user_sessions WHERE sessionToken = ?').get(token);
+      if (session && session.expiresAt > Math.floor(Date.now() / 1000)) {
+        // Issue a new token with extended expiration
+        const expiresInSec = 60 * 60; // 1 hour
+        const newToken = jwt.sign({ username: payload.username, role: payload.role }, SECRET_KEY, { expiresIn: expiresInSec });
+        const now = Math.floor(Date.now() / 1000);
+        const newExpiresAt = now + expiresInSec;
+
+        // Update sessionToken and expiresAt in the database
+        db.prepare('UPDATE user_sessions SET sessionToken = ?, expiresAt = ? WHERE id = ?')
+          .run(newToken, newExpiresAt, session.id);
+
+        res.setHeader("x-refreshed-token", newToken);
+
+        cleanupExpiredSessions();
+      }
+    } catch (err) {
+      // Token invalid or expired
+    }
+  }
+  next();
+});
+
+// Remove expired sessions
+function cleanupExpiredSessions() {
+  const now = Math.floor(Date.now() / 1000);
+  db.prepare('DELETE FROM user_sessions WHERE expiresAt < ?').run(now);
+}
+
 function formatTimestamp(timestamp) {
     const date = new Date(timestamp);
 
@@ -218,7 +255,7 @@ app.post("/login", async (req, res) => {
     );
   }
   const getUserStmt = db.prepare(`
-    SELECT * FROM user_authorization WHERE id = ?;
+    SELECT * FROM user_authorization WHERE username = ? COLLATE NOCASE;
   `);
 
   const user = getUserStmt.get(username);
@@ -232,8 +269,21 @@ app.post("/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
-  const token = jwt.sign({ username: user.username, role: user.role }, SECRET_KEY, { expiresIn: "1h" });
-  res.json({ token });
+  cleanupExpiredSessions();
+
+  // Create JWT token
+  const expiresInSec = 60 * 60; // 1 hour
+  const token = jwt.sign({ username: user.username, role: user.role }, SECRET_KEY, { expiresIn: expiresInSec });
+
+  // Persist session in user_sessions table
+  const now = Math.floor(Date.now() / 1000);
+  const expiresAt = now + expiresInSec;
+  db.prepare(`
+    INSERT INTO user_sessions (userId, sessionToken, createdAt, expiresAt)
+    VALUES (?, ?, ?, ?)
+  `).run(user.id, token, now, expiresAt);
+
+  res.json({ token, user: { username: user.username, role: user.role } });
 });
 
 // Update the scanMode for a thermostat by ip using SQLite and db context
@@ -278,6 +328,25 @@ const updateThermostatScanMode2 = (ip, scanMode) => {
         );
 
         console.log(`Saved DB data for ${ip}: scanMode: `, scanMode);
+        return true;
+    } catch (error) {
+        console.log(`Error saving DB data for ${ip}: error: `, error);
+        return false;
+    }
+}
+
+const updateThermostatEnabled = (ip, enabled) => {
+    try {
+        // Database insertion
+        const stmt = db.prepare(`
+            UPDATE thermostats SET enabled = ? WHERE ip = ?
+        `);
+        stmt.run(
+            enabled,
+            ip
+        );
+
+        console.log(`Saved DB data for ${ip}: enabled: `, enabled);
         return true;
     } catch (error) {
         console.log(`Error saving DB data for ${ip}: error: `, error);
@@ -385,10 +454,119 @@ const authRoutes = express.Router();
 
 authRoutes.use(authenticateToken);
 
+authRoutes.post('/logout', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.decode(token);
+    db.prepare('DELETE FROM user_sessions WHERE sessionToken = ?').run(token);
+  }
+  res.json({ message: "Logged out" });
+});
+
+authRoutes.get('/tokenInfo', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.decode(token);
+    if (decoded) {
+      res.json({
+        username: decoded.username,
+        role: decoded.role,
+        exp: decoded.exp,
+        iat: decoded.iat
+      });
+    } else {
+      res.status(401).json({ error: "Invalid token" });
+    }
+  }
+});
+
 authRoutes.get("/user", async (req, res) => {
-  const user = users.find((u) => u.id === req.user.id);
-  if (!user) return res.status(404).json({ error: "User not found" });
-  res.json(user);
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.decode(token);
+    const session = db.prepare('SELECT * FROM user_sessions WHERE sessionToken = ?').get(token);
+    if (!session || session.expiresAt < Math.floor(Date.now() / 1000)) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(session.userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json(user);
+  }
+  res.status(401).json({ error: "Unauthorized" });
+});
+
+// Users
+// GET /users → List users
+authRoutes.get('/users', async (req, res) => {
+  const users = db.prepare(`
+    SELECT u.id, u.username, u.email, u.enabled, r.name as role, u.roleId
+    FROM users u
+    JOIN roles r ON u.roleId = r.id
+  `).all();
+  res.json(users);
+});
+
+// POST /users → Add user
+authRoutes.post('/users', async (req, res) => {
+  const { username, email, password, roleId } = req.body;
+  if (!username || !email || !password || !roleId) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+  const hashedPassword = await bcrypt.hash(password, 10);
+  db.prepare(`
+    INSERT INTO users (username, email, password, roleId, enabled)
+    VALUES (?, ?, ?, ?, 1)
+  `).run(username, email, hashedPassword, roleId);
+  res.json({ message: "User added" });
+});
+
+// PUT /users/:id → Update user (role, email, etc.)
+authRoutes.put('/users/:id', async (req, res) => {
+  const { email, roleId, password, enabled } = req.body;
+  const { id } = req.params;
+  let query = "UPDATE users SET ";
+  const params = [];
+  if (email) {
+    query += "email = ?, ";
+    params.push(email);
+  }
+  if (roleId) {
+    query += "roleId = ?, ";
+    params.push(roleId);
+  }
+  if (password) {
+    query += "password = ?, ";
+    params.push(bcrypt.hashSync(password, 10));
+  }
+  if (enabled !== undefined) {
+    query += "enabled = ?, ";
+    params.push(enabled ? 1 : 0);
+  }
+  query = query.replace(/, $/, " "); // Remove trailing comma
+  query += "WHERE id = ?";
+  params.push(id);
+  db.prepare(query).run(...params);
+  res.json({ message: "User updated" });
+});
+
+// POST /users/:id/disable → Set enabled to 0
+authRoutes.post('/users/:id/enabled', async (req, res) => {
+  const { id } = req.params;
+  const { enable } = req.body;
+  db.prepare("UPDATE users SET enabled = ? WHERE id = ?").run(enable, id);
+  res.json({ message: "User enabled/disabled" });
+});
+
+// Roles
+// GET /roles → List roles
+authRoutes.get('/roles', async (req, res) => {
+  const roles = db.prepare(`
+    SELECT * FROM roles
+  `).all();
+  res.json(roles);
 });
 
 authRoutes.get("/tstat/:ip", async (req, res) => {
@@ -832,20 +1010,21 @@ authRoutes.post("/cloud/:ip", async (req, res) => {
         const payload = {
             interval: req.body.interval || 60, // Default to 60 seconds if not provided
             url: req.body.url || "",
+            status: req.body.status || 2,
             enabled: req.body.enabled || 0, // Default to 0 if not provided
             authkey: req.body.authkey || "", // Default to empty string if not provided
-            status: req.body.status || 2,
             status_code: req.body.status_code || 200
         };
 
         const response = await fetch(`http://${ip}/cloud`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload).replace(", ", ",")
         });
     
-        const respData = await response.json();
-        console.log("POST response:", JSON.stringify(respData)); // Log the post response
+        const respData = await response.text(); //.json();
+        //console.log("POST response:", JSON.stringify(respData)); // Log the post response
+        console.log("POST response:", respData); // Log the post response
         res.json(respData);
     } catch (error) {
         console.log("Error: ", error);
@@ -1043,18 +1222,59 @@ authRoutes.get("/thermostatscan/:subnet", async (req, res) => {
 });
 
 authRoutes.post("/thermostats", (req, res) => {
-    const { uuid, ip, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode } = req.body;
-    if (!uuid ||!ip || !model || !location || !cloudUrl || !cloudAuthkey || !scanInterval || !scanMode) {
-        return res.status(400).json({ error: "Thermostat must have an uuid, IP, model, location, cloudUrl, cloudAuthkey, scanInterval, and scanMode." });
-    }
+    const { uuid, ip, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, enabled } = req.body;
 
+    if (!uuid ||!ip || !model || !location || !cloudUrl || !cloudAuthkey || !scanInterval || !scanMode) {
+        return res.status(400).json({ error: "Thermostat must have an uuid, IP, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, and enabled status." });
+    }
+    let enabled2 = enabled;
+    if (enabled2 === undefined || enabled2 === null) {
+        enabled2 = true;
+    }
     const addThermostatStmt = db.prepare(`
-        INSERT INTO thermostats (uuid, ip, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        INSERT INTO thermostats (uuid, ip, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, enabled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
     `);
-    addThermostatStmt.run(uuid, ip, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode);
+    addThermostatStmt.run(uuid, ip, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, enabled2);
 
     res.status(201).json({ message: "Thermostat added successfully" });
+});
+
+authRoutes.put("/thermostats/:ip", (req, res) => {
+    const { uuid, ip, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, enabled } = req.body;
+
+    if (!uuid ||!ip || !model || !location || !cloudUrl || !cloudAuthkey || !scanInterval || !scanMode) {
+        return res.status(400).json({ error: "Thermostat must have an uuid, IP, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, and enabled status." });
+    }
+    let enabled2 = enabled;
+    if (enabled2 === undefined || enabled2 === null) {
+        enabled2 = true;
+    }
+    const updateThermostatStmt = db.prepare(`
+        UPDATE thermostats SET uuid = ?, model = ?, location = ?, cloudUrl = ?, cloudAuthkey = ?, scanInterval = ?, scanMode = ?, enabled = ?
+        WHERE ip = ?;
+    `);
+    updateThermostatStmt.run(uuid, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, enabled2, ip);
+
+    res.status(200).json({ message: "Thermostat updated successfully" });
+});
+
+authRoutes.delete("/thermostats/:ip", (req, res) => {
+    const { ip } = req.params;
+
+    if (!ip) {
+        return res.status(400).json({ error: "IP address is required" });
+    }
+    const { thermostatInfo } = req.body;
+
+    if (ip === undefined) {
+        updateThermostatEnabled(thermostatInfo.ip, 0); // Disable the thermostat before deleting
+    }
+    else {
+        updateThermostatEnabled(ip, 0); // Disable the thermostat before deleting
+    }
+
+    res.status(200).json({ message: "Thermostat disabled successfully" });
 });
 
 app.use(authRoutes);

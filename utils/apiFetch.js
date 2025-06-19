@@ -1,5 +1,3 @@
-import { logout } from "../context/AuthContext";
-
 const apiFetch = async (hostname, endpoint, method = "GET", body = null, token = null, errorMessage = null, logMessage = null, logoutFn = null, timeout = 30000) => {
   const headers = {
     "Content-Type": "application/json",

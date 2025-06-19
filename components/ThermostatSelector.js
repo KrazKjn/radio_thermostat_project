@@ -117,7 +117,7 @@ const ThermostatSelector = () => {
     return (
       <View style={[commonStyles.digitalCard, { margin: 16, alignItems: "center" }]}>
         <ActivityIndicator size="large" color="#7A7AFF" />
-        <Text>⏳ Waiting for thermostats...</Text>
+        <Text style={{ color: "#7A7AFF" }}>⏳ Waiting for thermostats...</Text>
         <TouchableOpacity onPress={() => getThermostats(hostname, token)}>
           <Text style={{ color: "#007AFF", marginTop: 10 }}>Refresh</Text>
         </TouchableOpacity>
@@ -143,29 +143,33 @@ const ThermostatSelector = () => {
         </View>
       );
     } else {
-      const contentDB = thermostats.map((thermostat, index) => (
-        <View style={commonStyles.containerSimple} key={thermostat.location}>
-          <ThermostatControl
-            thermostatIp={thermostat.ip}
-            thermostatData={thermostatData}
-            setThermostatData={setThermostatData}
-            activeScreen={activeScreen}
-            setActiveScreen={setActiveScreen}
-          />
-        </View>
+      const contentDB = thermostats
+        .filter(thermostat => thermostat.enabled === 1) // Select only enabled thermostats
+        .map((thermostat, index) => (
+          <View style={commonStyles.containerSimple} key={thermostat.location}>
+            <ThermostatControl
+              thermostatIp={thermostat.ip}
+              thermostatData={thermostatData}
+              setThermostatData={setThermostatData}
+              activeScreen={activeScreen}
+              setActiveScreen={setActiveScreen}
+            />
+          </View>
       ));
       return (
         <View style={{ flex: 1 }}>
           {/* Tab Navigation */}
           <View style={commonStyles.tabContainer}>
-            {thermostats.map((tab, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[commonStyles.tab, activeTab === index && commonStyles.activeTab]}
-                onPress={() => setActiveTab(index)}
-              >
-                <Text style={[commonStyles.tabText, activeTab === index && commonStyles.activeTabText]}>{tab.location}</Text>
-              </TouchableOpacity>
+            {thermostats
+              .filter(thermostat => thermostat.enabled === 1) // Select only enabled thermostats
+              .map((tab, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[commonStyles.tab, activeTab === index && commonStyles.activeTab]}
+                  onPress={() => setActiveTab(index)}
+                >
+                  <Text style={[commonStyles.tabText, activeTab === index && commonStyles.activeTabText]}>{tab.location}</Text>
+                </TouchableOpacity>
             ))}
           </View>
 

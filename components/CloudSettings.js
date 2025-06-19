@@ -7,12 +7,13 @@ import { useAuth } from "../context/AuthContext";
 import { HostnameContext } from "../context/HostnameContext";
 
 const CloudSettings = ({ thermostat }) => {
-    const { getCloudSettings, updateCloudSettings } = useThermostat();
+    const { getCloudSettings, updateCloudSettings, disableThermostat } = useThermostat();
     const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const [settings, setSettings] = useState(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [removing, setRemoving] = useState(false);
 
     useEffect(() => {
         fetchSettings();
@@ -47,10 +48,30 @@ const CloudSettings = ({ thermostat }) => {
         }
     };
 
+    const handleRemove = async () => {
+        setRemoving(true);
+        try {
+            await disableThermostat(hostname, token, thermostat);
+            alert("Success", "Cloud settings removed.");
+        } catch (e) {
+            alert("Error", "Failed to remove cloud settings.");
+        } finally {
+            setRemoving(false);
+        }
+    };
+
     if (loading || !settings) {
         return (
             <View style={[commonStyles.digitalCard, { margin: 16, alignItems: "center" }]}>
                 <ActivityIndicator size="large" color="#0ff" />
+                <TouchableOpacity
+                    style={[commonStyles.digitalButton, { marginTop: 20, flexDirection: "row", alignItems: "center", justifyContent: "center" }]}
+                    onPress={handleRemove}
+                    disabled={removing}
+                >
+                    <Icon name="trash-outline" size={22} color="#0ff" />
+                    <Text style={commonStyles.digitalButtonText}> {removing ? "Removing..." : "Remove"}</Text>
+                </TouchableOpacity>
             </View>
         );
     }
@@ -133,6 +154,14 @@ const CloudSettings = ({ thermostat }) => {
             >
                 <Icon name="save-outline" size={22} color="#0ff" />
                 <Text style={commonStyles.digitalButtonText}> {saving ? "Saving..." : "Save"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={[commonStyles.digitalButton, { marginTop: 20, flexDirection: "row", alignItems: "center", justifyContent: "center" }]}
+                onPress={handleRemove}
+                disabled={removing}
+            >
+                <Icon name="trash-outline" size={22} color="#0ff" />
+                <Text style={commonStyles.digitalButtonText}> {removing ? "Removing..." : "Remove"}</Text>
             </TouchableOpacity>
         </View>
     );

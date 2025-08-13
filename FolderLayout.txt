@@ -1,0 +1,18 @@
+my-react-app/
+├── public/
+├── src/
+│   ├── assets/
+│   ├── components/
+│   ├── pages/
+│   ├── hooks/
+│   ├── services/
+│   ├── utils/
+│   ├── styles/
+│   ├── App.js
+│   ├── index.js
+│   └── setupTests.js
+├── .env
+├── .gitignore
+├── package.json
+├── README.md
+└── node_modules/

@@ -1,159 +1,144 @@
 import { StyleSheet } from "react-native";
 
-// Base Styles
-const baseContainer = {
-    flex: 1,
-    padding: 5,
-    //backgroundColor: "green" // Uncomment if needed for debugging the UI
-};
-
-const baseText = {
-    fontSize: 16,
-};
-
-const baseButton = {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 10,
-    borderRadius: 5,
-};
-
 // Add these at the top of your component file, after imports
 
-const headerStyle = {
-  padding: 8,
-  backgroundColor: '#007BFF',
-  color: '#fff',
-  fontWeight: 'bold',
-  borderRightWidth: 1,
-  borderColor: '#fff',
-  textAlign: 'center',
+// Refactored Styles
+const colors = {
+  primary: "#007BFF",
+  secondary: "#28A745",
+  accent: "#0ff",
+  background: "#f8f9fa",
+  text: "#333",
+  error: "red",
+  white: "#fff",
+  border: "#ccc",
+  dark: "#222",
+  light: "#ddd",
 };
 
-const cellStyle = {
+const sizes = {
+  borderRadius: 8,
+  padding: 10,
+  fontSize: 16,
+  headerFontSize: 24,
+  titleFontSize: 20,
+};
+
+// Base Styles
+const baseContainer = {
+  flex: 1,
+  padding: 5,
+};
+const baseText = {
+  fontSize: sizes.fontSize,
+};
+const baseButton = {
+  alignItems: "center",
+  justifyContent: "center",
+  padding: sizes.padding,
+  borderRadius: sizes.borderRadius,
+};
+
+// Table header and cell styles
+export const headerStyle = {
   padding: 8,
-  backgroundColor: '#f8f9fa',
-  color: '#333',
+  backgroundColor: colors.primary,
+  color: colors.white,
+  fontWeight: "bold",
   borderRightWidth: 1,
-  borderColor: '#ccc',
-  textAlign: 'center',
+  borderColor: colors.white,
+  textAlign: "center",
+};
+export const cellStyle = {
+  padding: 8,
+  backgroundColor: colors.background,
+  color: colors.text,
+  borderRightWidth: 1,
+  borderColor: colors.border,
+  textAlign: "center",
 };
 
 // Refactored Styles
 const commonStyles = StyleSheet.create({
-    // Containers
-    container: { ...baseContainer, alignItems: "center" },
-    containerBasic: { ...baseContainer },
-    containerLeft: { ...baseContainer, alignItems: "flex-start", paddingLeft: 0 },
-    containerScroll: { marginTop: 0, flex: 1 },
-    containerSimple: {
-      padding: 4,
-      // backgroundColor: "red"  // Uncomment if needed for debugging the UI
-    },
-    containerThermostat: {
-       ...baseContainer,
-      // backgroundColor: "red"  // Uncomment if needed for debugging the UI
-       padding: 0,
-       marginBottom: 0,
-    },
+  // Containers
+  container: { ...baseContainer, alignItems: "center" },
+  containerBasic: { ...baseContainer },
+  containerLeft: { ...baseContainer, alignItems: "flex-start", paddingLeft: 0 },
+  containerScroll: { marginTop: 0, flex: 1 },
+  containerSimple: { padding: 4 },
+  containerThermostat: { ...baseContainer, padding: 0, marginBottom: 0 },
 
-    // Header & Titles
-    headerContainer: { alignItems: "center", marginBottom: 10 },
-    headerNetwork: { fontSize: 18, fontWeight: "bold", color: "#007BFF" },
-    header: { fontSize: 24, fontWeight: "bold", marginBottom: 20, color: "#333" },
-    title: { fontSize: 20, fontWeight: "bold", marginBottom: 10 },
-    
-    // Info & Labels
-    infoContainer: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 10 },
-    label: { ...baseText, fontWeight: "bold" },
-    value: { ...baseText, color: "#007BFF" },
-    valueText: { ...baseText, fontWeight: "bold", marginTop: 10 },
-    
-    // Inputs
-    input: {
-        width: "100%",
-        borderWidth: 1,
-        borderColor: "#ccc",
-        borderRadius: 5,
-        padding: 10,
-        marginBottom: 16,
-        backgroundColor: "#fff",
-        fontSize: 16,
-    },
-    
-    // Buttons
-    buttonContainer: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 15 },
-    buttonContainerLeft: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", gap: 15 },
-    button: { ...baseButton, backgroundColor: "#ddd", borderRadius: 8 },
-    buttonIncreaseDecrease: { ...baseButton, backgroundColor: "#007BFF", fontWeight: "bold", width: 40, height: 40 },
-    setButton: { ...baseButton, backgroundColor: "#28A745", fontWeight: "bold", paddingVertical: 10, paddingHorizontal: 20, marginTop: 10, height: 60 },
-    activeButton: { backgroundColor: "#007BFF" },
-    buttonText: { ...baseButton, color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
-    setButtonText: { ...baseButton, color: "#FFFFFF", fontSize: 16, fontWeight: "bold" },
-    
-    // Text & Status
-    text: { ...baseText, marginTop: 5, color: "#777" },
-    activeText: { color: "#fff" },
-    errorText: { color: "red", fontSize: 14, marginBottom: 10 },
-    status: { ...baseText, fontWeight: "bold", marginBottom: 5, color: "#007BFF" },
-    statusRow: {
-      flexDirection: "row",
-      flexWrap: "wrap", // ✅ Allows wrapping on smaller screens
-      justifyContent: "center", // ✅ Keeps items centered when wrapped
-      gap: 15
-    },
-    statusButton: {
-      alignItems: "center",
-      padding: 10,
-      borderRadius: 8,
-      backgroundColor: "#ddd",
-      flexDirection: "row",
-      gap: 10
-    },
-    activeStatus: {
-      backgroundColor: "#007BFF"
-    },
-    
-    // Item & Action Descriptions
-    item: { ...baseText, paddingVertical: 5 },
-    actionDescription: { fontSize: 14, marginBottom: 15, color: "rgb(85, 155, 85)", textAlign: "center" },
+  // Headers & Titles
+  headerContainer: { alignItems: "center", marginBottom: 10 },
+  headerNetwork: { fontSize: 18, fontWeight: "bold", color: colors.primary },
+  header: { fontSize: sizes.headerFontSize, fontWeight: "bold", marginBottom: 20, color: colors.text },
+  title: { fontSize: sizes.titleFontSize, fontWeight: "bold", marginBottom: 10 },
 
-    // Tabs
-    tabContainer: { flexDirection: "row", justifyContent: "center", marginBottom: 2 },
-    tab: { flex: 1, alignItems: "center", padding: 12, borderRadius: 6, backgroundColor: "#ddd", marginHorizontal: 5 },
-    activeTab: { backgroundColor: "#007BFF" },
-    tabText: { fontSize: 16, fontWeight: "bold", color: "#333" },
-    activeTabText: { color: "#fff" },
-    
-    // Temperature Controls
-    tempContainer: { alignItems: "center", marginVertical: 10 },
-    tempDisplay: { fontSize: 18, fontWeight: "bold", marginHorizontal: 10 },
-    controls: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+  // Info & Labels
+  infoContainer: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 10 },
+  label: { ...baseText, fontWeight: "bold" },
+  value: { ...baseText, color: colors.primary },
+  valueText: { ...baseText, fontWeight: "bold", marginTop: 10 },
 
-    scrollContainer: {
-      padding: 2,
-    },
-    infoText: { fontSize: 16, textAlign: "center", marginVertical: 10 },
-    
-    rowContainer: { flexDirection: "row", alignItems: "center", marginVertical: 10 },
-    inputSmall: { borderWidth: 1, padding: 5, width: 60, marginLeft: 10 },
-
-    buttonContainerControl: { flexDirection: "row", justifyContent: "center", marginVertical: 10 },
-
-  saveContainer: {
-    alignItems: "center",
-    marginVertical: 15,
+  // Inputs
+  input: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: sizes.borderRadius,
+    padding: sizes.padding,
+    marginBottom: 16,
+    backgroundColor: colors.white,
+    fontSize: sizes.fontSize,
   },
-  saveButton: { ...baseButton, backgroundColor: "#007BFF", borderRadius: 8 },
-  usersSaveButton: { ...baseButton, foregroundColor: "#007BFF", backgroundColor: "#333", borderRadius: 8 },
+  inputSmall: { borderWidth: 1, padding: 5, width: 60, marginLeft: 10 },
 
-  saveText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#fff",
-  },
+  // Buttons
+  buttonContainer: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 15 },
+  buttonContainerLeft: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", gap: 15 },
+  buttonContainerControl: { flexDirection: "row", justifyContent: "center", marginVertical: 10 },
+  button: { ...baseButton, backgroundColor: colors.light },
+  buttonIncreaseDecrease: { ...baseButton, backgroundColor: colors.primary, fontWeight: "bold", width: 40, height: 40 },
+  setButton: { ...baseButton, backgroundColor: colors.secondary, fontWeight: "bold", paddingVertical: 10, paddingHorizontal: 20, marginTop: 10, height: 60 },
+  activeButton: { backgroundColor: colors.primary },
+  saveButton: { ...baseButton, backgroundColor: colors.primary },
+  usersSaveButton: { ...baseButton, backgroundColor: colors.dark },
+  buttonText: { color: colors.white, fontSize: sizes.fontSize, fontWeight: "bold" },
+  setButtonText: { color: colors.white, fontSize: sizes.fontSize, fontWeight: "bold" },
+  saveText: { fontSize: 18, fontWeight: "bold", color: colors.white },
 
-    // digital styles...
+  // Text & Status
+  text: { ...baseText, marginTop: 5, color: "#777" },
+  activeText: { color: colors.white },
+  errorText: { color: colors.error, fontSize: 14, marginBottom: 10 },
+  status: { ...baseText, fontWeight: "bold", marginBottom: 5, color: colors.primary },
+  statusRow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 15 },
+  statusButton: { alignItems: "center", padding: 10, borderRadius: sizes.borderRadius, backgroundColor: colors.light, flexDirection: "row", gap: 10 },
+  activeStatus: { backgroundColor: colors.primary },
+
+  // Item & Action Descriptions
+  item: { ...baseText, paddingVertical: 5 },
+  actionDescription: { fontSize: 14, marginBottom: 15, color: "rgb(85, 155, 85)", textAlign: "center" },
+
+  // Tabs
+  tabContainer: { flexDirection: "row", justifyContent: "center", marginBottom: 2 },
+  tab: { flex: 1, alignItems: "center", padding: 12, borderRadius: 6, backgroundColor: colors.light, marginHorizontal: 5 },
+  activeTab: { backgroundColor: colors.primary },
+  tabText: { fontSize: 16, fontWeight: "bold", color: colors.text },
+  activeTabText: { color: colors.white },
+
+  // Temperature Controls
+  tempContainer: { alignItems: "center", marginVertical: 10 },
+  tempDisplay: { fontSize: 18, fontWeight: "bold", marginHorizontal: 10 },
+  controls: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+
+  // Misc Layout
+  scrollContainer: { padding: 2 },
+  infoText: { fontSize: 16, textAlign: "center", marginVertical: 10 },
+  rowContainer: { flexDirection: "row", alignItems: "center", marginVertical: 10 },
+  saveContainer: { alignItems: "center", marginVertical: 15 },
+
+  // Digital styles (Thermostat UI)
   thermostatLayoutRow: {
       flexDirection: "row",
       alignItems: "stretch",
@@ -240,13 +225,13 @@ const commonStyles = StyleSheet.create({
   },
   digitalInput: {
     backgroundColor: "#181c20",
-    color: "#0ff",
+    color: colors.accent,
     borderWidth: 1,
-    borderColor: "#0ff",
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    fontSize: 16,
+    borderColor: colors.accent,
+    borderRadius: sizes.borderRadius,
+    paddingVertical: sizes.padding,
+    paddingHorizontal: sizes.padding,
+    fontSize: sizes.fontSize,
     fontFamily: "monospace",
     marginVertical: 4,
     minWidth: 60,

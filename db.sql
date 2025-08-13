@@ -12,7 +12,25 @@ CREATE TABLE thermostats (
     created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
 );
 
-ALTER TABLE scan_data RENAME TO scan_data_old;
+CREATE INDEX idx_thermostats_uuid ON thermostats(uuid);
+
+-- Create users table
+CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL
+);
+
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_username ON users(username);
+
+-- Example insert statements (passwords should be hashed in your application code)
+--INSERT INTO users (id, username, email, password, role) VALUES
+--('1', 'admin', 'admin@example.com', '<hashed_password>', 'admin'),
+--('2', 'user1', 'user1@example.com', '<hashed_password>', 'user'),
+--('3', 'user2', 'user2@example.com', '<hashed_password>', 'user');
 
 -- HVAC Scan Data
 CREATE TABLE scan_data (
@@ -27,6 +45,7 @@ CREATE TABLE scan_data (
     FOREIGN KEY (thermostat_id) REFERENCES thermostats(id)
 );
 
+CREATE INDEX idx_scan_data_thermostat ON scan_data(thermostat_id, timestamp);
 
 CREATE VIEW thermostat_readings AS
 SELECT sd.timestamp, t.uuid, t.ip, t.location, sd.temp, sd.tmode, sd.tTemp, sd.tstate, sd.fstate
@@ -87,6 +106,3 @@ SELECT h.event_time, t.uuid, t.ip, t.location,
        h.prev_fstate, h.new_fstate
 FROM hvac_events h
 JOIN thermostats t ON h.thermostat_id = t.id;
-
-CREATE INDEX idx_thermostats_uuid ON thermostats(uuid);
-CREATE INDEX idx_scan_data_thermostat ON scan_data(thermostat_id, timestamp);

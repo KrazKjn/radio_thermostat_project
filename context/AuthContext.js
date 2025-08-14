@@ -21,10 +21,10 @@ export const AuthProvider = ({ children }) => {
                 console.log("Waiting for hostname to resolve...");
                 return false;
             }
-            const data = await apiFetch(hostname, "/login", "POST", { username, password });
+            const data = await apiFetch(`${hostname}/login`, "POST", { username, password });
             await AsyncStorage.setItem("auth_token", data.token);
             setToken(data.token);
-            const decoded = await apiFetch(hostname, "/tokenInfo", "GET", null, data.token);
+            const decoded = await apiFetch(`${hostname}/tokenInfo`, "GET", null, data.token);
             if (decoded) {
                 setTokenInfo(decoded);
             } else {
@@ -42,7 +42,7 @@ export const AuthProvider = ({ children }) => {
     const logout = async () => {
         const token = await AsyncStorage.getItem("auth_token");
         if (token) {
-            const data = await apiFetch(hostname, "/logout", "POST", null, token);
+            const data = await apiFetch(`${hostname}/logout`, "POST", null, token);
         }
         await AsyncStorage.removeItem("auth_token");
         setToken(null);
@@ -60,9 +60,9 @@ export const AuthProvider = ({ children }) => {
                 return false;
             }
 
-            const data = await apiFetch(hostname, "/user", "GET", null, storedToken);
+            const data = await apiFetch(`${hostname}/user`, "GET", null, storedToken);
             setToken(storedToken);
-            const decoded = await apiFetch(hostname, "/tokenInfo", "GET", null, data.token);
+            const decoded = await apiFetch(`${hostname}/tokenInfo`, "GET", null, data.token);
             if (decoded) {
                 setTokenInfo(decoded);
             } else {

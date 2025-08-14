@@ -2,12 +2,12 @@
     "main": "index.web.js",
     "name": "radio_thermostat_project",
     "version": "0.0.1",
-    "proxy": "http://192.168.0.21",
     "private": true,
     "scripts": {
         "start": "npx expo start",
         "web": "npx expo start --web",
-        "shart": "node node_modules/react-native/local-cli/cli.js start"
+        "shart": "node node_modules/react-native/local-cli/cli.js start",
+        "server": "node server/server.js"
     },
     "dependencies": {
         "@babel/runtime": "^7.27.0",
@@ -27,6 +27,7 @@
         "jwt-decode": "^4.0.0",
         "metro-runtime": "^0.82.1",
         "net-snmp": "^3.22.0",
+        "node-arp": "^1.0.6",
         "react": "18.3.1",
         "react-dom": "18.3.1",
         "react-native": "0.76.9",

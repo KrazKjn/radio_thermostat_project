@@ -55,7 +55,8 @@ router.delete("/thermostats/:ip", authenticateToken, thermostatController.delete
 router.get("/thermostatscan/:subnet", authenticateToken, thermostatController.scanThermostats);
 
 // Cloud data
-router.post('/captureStatIn', authenticateToken, thermostatController.captureStatIn);
+// router.post('/captureStatIn', authenticateToken, thermostatController.captureStatIn);
+router.post('/captureStatIn', thermostatController.captureStatIn);
 
 
 module.exports = router;

@@ -1,4 +1,4 @@
-const apiFetch = async (url, method = "GET", body = null, token = null, errorMessage = null, logMessage = null, logoutFn = null, timeout = 30000) => {
+const apiFetch = async (hostname, endpoint, method = "GET", body = null, token = null, errorMessage = null, logMessage = null, logoutFn = null, timeout = 30000) => {
   const headers = {
     "Content-Type": "application/json",
   };
@@ -17,7 +17,7 @@ const apiFetch = async (url, method = "GET", body = null, token = null, errorMes
   let response = null;
   try {
     // Set a timeout to abort the request
-    response = await fetch(url, {
+    response = await fetch(`http://${hostname}:5000${endpoint}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : null,

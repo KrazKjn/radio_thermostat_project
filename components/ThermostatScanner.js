@@ -84,7 +84,7 @@ const ThermostatScanner = () => {
     for (let i = 20; i <= 30; i++) {
       const ip = `${subnet}.${i}`;
       try {
-        const data = await apiFetch(`${hostname}/thermostat/${ip}`, "GET", null, token, "Error fetching thermostat data", "Fetching cached thermostat data...", logout, 3000);
+        const data = await apiFetch(hostname, `/thermostat/${ip}`, "GET", null, token, "Error fetching thermostat data", "Fetching cached thermostat data...", logout, 3000);
         if (data && data.model) {
             foundDevices.push({ ip, model: data.model, name: data.name });
         }

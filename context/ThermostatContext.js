@@ -72,8 +72,7 @@ export const ThermostatProvider = ({ children }) => {
   const updateThermostatName = async (thermostatIp, name, hostname, tokenOverride) => {
     try {
       const data = await apiFetch(
-        hostname,
-        `/thermostat/name/${thermostatIp}`,
+        `${hostname}/thermostat/name/${thermostatIp}`,
         "POST",
         { name },
         tokenOverride ?? token,
@@ -100,8 +99,7 @@ export const ThermostatProvider = ({ children }) => {
   const updateThermostatTargetTemperature = async (thermostatIp, hostname, tokenOverride, tempMode, targetTemp) => {
     try {
       const data = await apiFetch(
-        hostname,
-        `/tstat/${thermostatIp}`,
+        `${hostname}/tstat/${thermostatIp}`,
         "POST",
         { tmode: tempMode, temperature: targetTemp },
         tokenOverride ?? token,
@@ -127,8 +125,7 @@ export const ThermostatProvider = ({ children }) => {
 
     try {
         const data = await apiFetch(
-            hostname,
-            `/tstat/${thermostatIp}`,
+            `${hostname}/tstat/${thermostatIp}`,
             "GET",
             null,
             tokenOverride ?? token,
@@ -201,8 +198,7 @@ export const ThermostatProvider = ({ children }) => {
   const fetchModelInfo = async (thermostatIp, hostname, tokenOverride) => {
     try {
         const data = await apiFetch(
-            hostname,
-            `/thermostat/${thermostatIp}`,
+            `${hostname}/thermostat/${thermostatIp}`,
             "GET",
             null,
             tokenOverride ?? token,
@@ -234,8 +230,7 @@ export const ThermostatProvider = ({ children }) => {
   const fetchModelInfoDetailed = async (thermostatIp, hostname, tokenOverride) => {
     try {
         const data = await apiFetch(
-            hostname,
-            `/thermostat/detailed/${thermostatIp}`,
+            `${hostname}/thermostat/detailed/${thermostatIp}`,
             "GET",
             null,
             tokenOverride ?? token,
@@ -275,8 +270,7 @@ export const ThermostatProvider = ({ children }) => {
                 ipList.map(async (ip) => {
                     try {
                         const data = await apiFetch(
-                            hostname,
-                            `/thermostat/${ip}`,
+                            `${hostname}/thermostat/${ip}`,
                             "GET",
                             null,
                             tokenOverride ?? token,
@@ -313,8 +307,7 @@ export const ThermostatProvider = ({ children }) => {
     const fetchThermostatName = async (thermostatIp, hostname, tokenOverride) => {
     try {
         const data = await apiFetch(
-            hostname,
-            `/name/${thermostatIp}`,
+            `${hostname}/name/${thermostatIp}`,
             "GET",
             null,
             tokenOverride ?? token,
@@ -372,8 +365,7 @@ export const ThermostatProvider = ({ children }) => {
 
         console.log(JSON.stringify(bodyData)); // Check the output
         const data = await apiFetch(
-            hostname,
-            `/tstat/${thermostatIp}`,
+            `${hostname}/tstat/${thermostatIp}`,
             "POST",
             bodyData,
             tokenOverride ?? token,
@@ -407,8 +399,7 @@ export const ThermostatProvider = ({ children }) => {
 
         // Make the API call to update the mode
         const data = await apiFetch(
-            hostname,
-            `/tstat/${thermostatIp}`,
+            `${hostname}/tstat/${thermostatIp}`,
             "POST",
             { tmode: newMode },
             tokenOverride ?? token,
@@ -447,8 +438,7 @@ export const ThermostatProvider = ({ children }) => {
 
         // Make the API call to update the fan mode
         const data = await apiFetch(
-            hostname,
-            `/tstat/${thermostatIp}`,
+            `${hostname}/tstat/${thermostatIp}`,
             "POST",
             { fmode: newMode },
             tokenOverride ?? token,
@@ -487,8 +477,7 @@ export const ThermostatProvider = ({ children }) => {
 
         // Make the API call to update the hold mode
         const data = await apiFetch(
-            hostname,
-            `/tstat/${thermostatIp}`,
+            `${hostname}/tstat/${thermostatIp}`,
             "POST",
             { hold: newMode },
             tokenOverride ?? token,
@@ -521,8 +510,7 @@ export const ThermostatProvider = ({ children }) => {
 
         // Make the API call to update the override mode
         const data = await apiFetch(
-            hostname,
-            `/tstat/${thermostatIp}`,
+            `${hostname}/tstat/${thermostatIp}`,
             "POST",
             { override: newMode },
             tokenOverride ?? token,
@@ -566,8 +554,7 @@ export const ThermostatProvider = ({ children }) => {
     const fetchSwingValue = useCallback(async (thermostatIp, hostname, tokenOverride) => {
         try {
             const data = await apiFetch(
-                hostname,
-                `/tswing/${thermostatIp}`,
+                `${hostname}/tswing/${thermostatIp}`,
                 "GET",
                 null,
                 tokenOverride ?? token,
@@ -591,8 +578,7 @@ export const ThermostatProvider = ({ children }) => {
         console.log("Set Swing value:", valueAPI.toFixed(2));
 
         const data = await apiFetch(
-            hostname,
-            `/tswing/${thermostatIp}`,
+            `${hostname}/tswing/${thermostatIp}`,
             "POST",
             { tswing: valueAPI.toFixed(2) },
             tokenOverride ?? token,
@@ -612,8 +598,7 @@ export const ThermostatProvider = ({ children }) => {
   const fetchCachedData = useCallback(async (thermostatIp, hostname, tokenOverride) => {
     try {
         const cachedData = await apiFetch(
-            hostname,
-            `/cache/${thermostatIp}`,
+            `${hostname}/cache/${thermostatIp}`,
             "GET",
             null,
             tokenOverride ?? token,
@@ -639,8 +624,7 @@ export const ThermostatProvider = ({ children }) => {
   const startScanner = useCallback(async (thermostatIp, hostname, tokenOverride, interval = 60000) => {
     try {
         const response = await apiFetch(
-            hostname,
-            `/scanner/start/${thermostatIp}`,
+            `${hostname}/scanner/start/${thermostatIp}`,
             "POST",
             { interval },
             tokenOverride ?? token,
@@ -658,8 +642,7 @@ export const ThermostatProvider = ({ children }) => {
   const stopScanner = useCallback(async (thermostatIp, hostname, tokenOverride) => {
     try {
         const response = await apiFetch(
-            hostname,
-            `/scanner/stop/${thermostatIp}`,
+            `${hostname}/scanner/stop/${thermostatIp}`,
             "POST",
             null,
             tokenOverride ?? token,
@@ -677,8 +660,7 @@ export const ThermostatProvider = ({ children }) => {
   const restartScanner = useCallback(async (thermostatIp, hostname, tokenOverride, interval = 60000) => {
     try {
         const response = await apiFetch(
-            hostname,
-            `/scanner/restart/${thermostatIp}`,
+            `${hostname}/scanner/restart/${thermostatIp}`,
             "POST",
             { interval },
             tokenOverride ?? token,
@@ -696,8 +678,7 @@ export const ThermostatProvider = ({ children }) => {
   const getScannerStatus = useCallback(async (thermostatIp, hostname, tokenOverride) => {
     try {
         const response = await apiFetch(
-            hostname,
-            `/scanner/status?ip=${thermostatIp}`,
+            `${hostname}/scanner/status?ip=${thermostatIp}`,
             "GET",
             null,
             tokenOverride ?? token,
@@ -717,8 +698,7 @@ export const ThermostatProvider = ({ children }) => {
   const fetchScannedData = useCallback(async (thermostatIp, hostname, tokenOverride) => {
     try {
         const response = await apiFetch(
-            hostname,
-            `/scanner/data/${thermostatIp}`,
+            `${hostname}/scanner/data/${thermostatIp}`,
             "GET",
             null,
             tokenOverride ?? token,
@@ -747,8 +727,7 @@ export const ThermostatProvider = ({ children }) => {
   const getSchedule = async (thermostatIp, hostname, tokenOverride, mode) => {
     try {
         const response = await apiFetch(
-            hostname,
-            `/schedule/${mode}/${thermostatIp}`,
+            `${hostname}/schedule/${mode}/${thermostatIp}`,
             "GET",
             null,
             tokenOverride ?? token,
@@ -766,8 +745,7 @@ export const ThermostatProvider = ({ children }) => {
   // Update a new schedule entry
   const updateSchedule = async (thermostatIp, hostname, tokenOverride, mode, scheduleEntry) => {
     try {
-        const response = await apiFetch(hostname,
-            `/schedule/${mode}/${thermostatIp}`,
+        const response = await apiFetch(`${hostname}/schedule/${mode}/${thermostatIp}`,
             "POST",
             scheduleEntry,
             tokenOverride ?? token,
@@ -788,8 +766,7 @@ export const ThermostatProvider = ({ children }) => {
   const getCloudSettings = async (thermostatIp, hostname, tokenOverride) => {
     try {
         const response = await apiFetch(
-            hostname,
-            `/cloud/${thermostatIp}`,
+            `${hostname}/cloud/${thermostatIp}`,
             "GET",
             null,
             tokenOverride ?? token,
@@ -807,8 +784,7 @@ export const ThermostatProvider = ({ children }) => {
   // Update a new cloud settings
   const updateCloudSettings = async (thermostatIp, hostname, tokenOverride, settings) => {
     try {
-        const response = await apiFetch(hostname,
-            `/cloud/${thermostatIp}`,
+        const response = await apiFetch(`${hostname}/cloud/${thermostatIp}`,
             "POST",
             settings,
             tokenOverride ?? token,
@@ -828,8 +804,7 @@ export const ThermostatProvider = ({ children }) => {
     /* fetch from DB or API */ 
     try {
         const response = await apiFetch(
-            hostname,
-            `/thermostats`,
+            `${hostname}/thermostats`,
             "GET",
             null,
             tokenOverride ?? token,
@@ -848,8 +823,7 @@ export const ThermostatProvider = ({ children }) => {
   
   const addThermostat = async (hostname, tokenOverride, thermostat) => {
     try {
-        const response = await apiFetch(hostname,
-            `/thermostats`,
+        const response = await apiFetch(`${hostname}/thermostats`,
             "POST",
             thermostat,
             tokenOverride ?? token,
@@ -867,8 +841,7 @@ export const ThermostatProvider = ({ children }) => {
 
   const updateThermostat = async (hostname, tokenOverride, thermostat) => {
     try {
-        const response = await apiFetch(hostname,
-            `/thermostats/${thermostat.thermostatInfo.ip}`,
+        const response = await apiFetch(`${hostname}/thermostats/${thermostat.thermostatInfo.ip}`,
             "PUT",
             thermostat,
             tokenOverride ?? token,
@@ -886,8 +859,7 @@ export const ThermostatProvider = ({ children }) => {
 
   const disableThermostat = async (hostname, tokenOverride, thermostat) => {
     try {
-        const response = await apiFetch(hostname,
-            `/thermostats/${thermostat.thermostatInfo.ip}`,
+        const response = await apiFetch(`${hostname}/thermostats/${thermostat.thermostatInfo.ip}`,
             "DELETE",
             thermostat,
             tokenOverride ?? token,
@@ -907,8 +879,7 @@ export const ThermostatProvider = ({ children }) => {
     /* scan, query, add all found */
     try {
         const response = await apiFetch(
-            hostname,
-            `/thermostatscan/${subnet}`,
+            `${hostname}/thermostatscan/${subnet}`,
             "GET",
             null,
             tokenOverride ?? token,

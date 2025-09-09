@@ -1,575 +1,19 @@
-const { HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO } = require('./constants/hvac_mode.js');
-const { HVAC_SCAN_DISABLED, HVAC_SCAN_DEMAND, HVAC_SCAN_CLOUD } = require('./constants/hvac_scan.js');
-const express = require("express");
-const cors = require("cors");
-const bodyParser = require("body-parser");
 const fetch = require("node-fetch");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const db = require('./db'); // Import your db module
-const { exec } = require("child_process");
-const axios = require("axios");
-const snmp = require("net-snmp");
-//require("dotenv").config(); // If using dotenv for env vars
-const app = express();
-const SECRET_KEY = "your_secret_key"; // Use a strong key in production
+const db = require('../../db');
+const { getThermostatScanMode, updateThermostatScanMode2, updateThermostatEnabled, scannerIntervalTask, scanSubnet, addDeviceByUUID } = require('../services/thermostatService');
+const { convertToTwoDecimalFloat } = require('../utils/utils');
+const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
+const { HVAC_SCAN_CLOUD } = require('../../constants/hvac_scan');
+const crypto = require('../utils/crypto');
 
-const optionsSNMP = {
-    timeout: 1000, // Timeout in milliseconds (1 second)
-    retries: 2,    // Number of retry attempts
-};
-
-app.use(cors());
-app.use(bodyParser.json()); // Enable JSON parsing
-
-// Cache object to store thermostat data by IP
 const cache = {};
 const CACHE_LIMIT = 120; // Limit cache size to 120 entries
 const CACHE_EXPIRATION = 15000; // 15 seconds
 const DEFAULT_SCAN_INTERVAL = 60000; // Scan every 15 seconds
 const scanners = {}; // Store active scanners by IP
 const daysOfWeek = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-const SERVICE_TOKEN_PAYLOAD = { username: "service", role: "service" };
-const SERVICE_TOKEN_EXPIRY = "30d"; // or as needed
 
-const ipToIdMap = {};  // Object to store IP → ID mappings
-const uuidToIdMap = {};  // Object to store UUID → ID mappings
-
-// Function to add an entry
-function addDeviceByIP(ip, id) {
-    ipToIdMap[ip] = id;
-}
-
-// Function to get ID by IP
-function getIdByIP(ip) {
-    if (!ipToIdMap[ip]) {
-        const getThermostatIdStmt = db.prepare(`
-            SELECT id FROM thermostats WHERE ip = ?;
-        `);
-
-        // Fetch thermostat_id from UUID
-        const thermostatRow = getThermostatIdStmt.get(ip);
-        if (!thermostatRow) {
-            console.error("Error: Thermostat not found for IP:", ip);
-            return null;
-        }
-        const thermostat_id = thermostatRow.id;
-        addDeviceByIP(ip, thermostat_id);
-        return thermostat_id;
-    }
-    return ipToIdMap[ip] || null;  // Returns ID or null if not found
-}
-
-// Function to add an entry
-function addDeviceByUUID(uuid, id) {
-    uuidToIdMap[uuid] = id;
-}
-
-// Function to get ID by UUID
-function getIdByUUID(uuid) {
-    return uuidToIdMap[uuid] || null;  // Returns ID or null if not found
-}
-
-// Function to generate a new service token
-function generateServiceToken() {
-    return jwt.sign(SERVICE_TOKEN_PAYLOAD, SECRET_KEY, { expiresIn: SERVICE_TOKEN_EXPIRY });
-}
-
-// Store the current service token and its expiration
-let SERVICE_TOKEN = generateServiceToken();
-let SERVICE_TOKEN_EXP = jwt.decode(SERVICE_TOKEN).exp * 1000; // ms
-
-// Helper to check and refresh the service token if expired or about to expire
-function getValidServiceToken() {
-    const now = Date.now();
-    // Refresh if token expires in less than 1 minute
-    if (!SERVICE_TOKEN || !SERVICE_TOKEN_EXP || SERVICE_TOKEN_EXP - now < 60000) {
-        SERVICE_TOKEN = generateServiceToken();
-        SERVICE_TOKEN_EXP = jwt.decode(SERVICE_TOKEN).exp * 1000;
-        console.log("Service token refreshed at", new Date().toISOString());
-    }
-    return SERVICE_TOKEN;
-}
-
-function convertToTwoDecimalFloat(text) {
-  const num = parseFloat(text);
-  return isNaN(num) ? null : parseFloat(num.toFixed(2));
-}
-
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1]; // Extract token from "Bearer <token>"
-
-    if (!token) return res.status(401).json({ error: "Unauthorized: No token provided" });
-
-    jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) return res.status(403).json({ error: "Forbidden: Invalid token" });
-
-        req.user = user;
-        next();
-    });
-};
-
-app.use((req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.split(" ")[1];
-    try {
-      const payload = jwt.verify(token, SECRET_KEY);
-
-      // Find the session in the database
-      const session = db.prepare('SELECT * FROM user_sessions WHERE sessionToken = ?').get(token);
-      if (session && session.expiresAt > Math.floor(Date.now() / 1000)) {
-        // Issue a new token with extended expiration
-        const expiresInSec = 60 * 60; // 1 hour
-        const newToken = jwt.sign({ username: payload.username, role: payload.role }, SECRET_KEY, { expiresIn: expiresInSec });
-        const now = Math.floor(Date.now() / 1000);
-        const newExpiresAt = now + expiresInSec;
-
-        // Update sessionToken and expiresAt in the database
-        db.prepare('UPDATE user_sessions SET sessionToken = ?, expiresAt = ? WHERE id = ?')
-          .run(newToken, newExpiresAt, session.id);
-
-        res.setHeader("x-refreshed-token", newToken);
-
-        cleanupExpiredSessions();
-      }
-    } catch (err) {
-      // Token invalid or expired
-    }
-  }
-  next();
-});
-
-// Remove expired sessions
-function cleanupExpiredSessions() {
-  const now = Math.floor(Date.now() / 1000);
-  db.prepare('DELETE FROM user_sessions WHERE expiresAt < ?').run(now);
-}
-
-function formatTimestamp(timestamp) {
-    const date = new Date(timestamp);
-
-    return {
-        day: date.getDate(),
-        hour: date.getHours(),
-        minute: date.getMinutes()
-    };
-}
-
-async function scanSubnet(subnet, timeout = 5000) {
-    const results = [];
-
-    console.log(`${Date().toString()}: Scanning for thermostats ...`);
-    for (let i = 1; i <= 254; i++) {
-        const ip = `${subnet}.${i}`;
-        const mac = await getMacAddress(ip);
-
-        if (mac) {
-            let location = undefined;
-            console.log(`${Date().toString()}: Scanning device on ${ip}/${mac} ...`);
-            if (false) {
-                location = await getDeviceName(ip);
-                const manufacturer = await lookupMac(mac);
-            }
-            try {
-                const controller = new AbortController();
-                const signal = controller.signal;
-
-                // Set a timeout to abort the request
-                const timeoutId = setTimeout(() => controller.abort(), timeout);
-                let response = await fetch(`http://${ip}/sys/name`, { signal });
-                clearTimeout(timeoutId); // Clear the timeout
-                let data = await response.json();
-
-                if (data && data.name) {
-                    location = data.name;
-                    response = await fetch(`http://${ip}/tstat/model`);
-                    data = await response.json();
-                    model = data.model;
-                    manufacturer = "Radio Thermostat"
-                    console.log(`${Date().toString()}: Device on ${ip}/${mac} is a Thermostat ...`);
-                    results.push({ id: getIdByIP(ip), ip, mac, manufacturer, location, model });
-                }
-            } catch (error) {
-                if (error.name === "AbortError") {
-                    console.log(`${Date().toString()}: Timeout checking Device on ${ip}/${mac} ...`);
-                } else {
-                    console.log(`${Date().toString()}: Device on ${ip}/${mac} is not a Thermostat ...`);
-                }
-            }
-        }
-    }
-    console.log(`${Date().toString()}: Scanning for thermostats ... Done!`);
-
-    return JSON.stringify(results, null, 2);
-}
-
-// Get MAC Address via ARP
-async function getMacAddress(ip) {
-    return new Promise((resolve) => {
-        exec(`arp -a ${ip}`, (error, stdout) => {
-            if (error) return resolve(null);
-            const match = stdout.match(/(([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2})/);
-            resolve(match ? match[0] : null);
-        });
-    });
-}
-
-// Get Device Name via SNMP
-async function getDeviceName(ip) {
-    return new Promise((resolve) => {
-        const session = snmp.createSession(ip, "public", optionsSNMP);
-        session.get(["1.3.6.1.2.1.1.5.0"], (error, varbinds) => {
-            session.close();
-            resolve(error ? null : varbinds[0].value.toString());
-        });
-    });
-}
-
-// Lookup MAC Address Manufacturer
-async function lookupMac(mac) {
-    try {
-        const response = await axios.get(`https://api.macvendors.com/${mac}`);
-        return response.data;
-    } catch (error) {
-        return "Unknown Manufacturer";
-    }
-}
-
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  const row = db.prepare('SELECT COUNT(*) as count FROM users').get();
-  if (row.count === 0) {
-    // No users exist, create the first admin user
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const stmt = db.prepare(`
-      INSERT INTO users (username, email, password, roleId) VALUES (?, ?, ?, ?)
-    `);
-    console.log(`Creating first admin user. username: ${username}, email: ${username}@test.net, password: ${hashedPassword}, role: admin`);
-    stmt.run(
-        username,
-        `${username}@test.net`,
-        hashedPassword,
-        1
-    );
-  }
-  const getUserStmt = db.prepare(`
-    SELECT * FROM user_authorization WHERE username = ? COLLATE NOCASE;
-  `);
-
-  const user = getUserStmt.get(username);
-  if (!user) {
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  //const user = users.find((u) => u.username === username);
-
-  if (!user || !bcrypt.compareSync(password, user.password)) {
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  cleanupExpiredSessions();
-
-  // Create JWT token
-  const expiresInSec = 60 * 60; // 1 hour
-  const token = jwt.sign({ username: user.username, role: user.role }, SECRET_KEY, { expiresIn: expiresInSec });
-
-  // Persist session in user_sessions table
-  const now = Math.floor(Date.now() / 1000);
-  const expiresAt = now + expiresInSec;
-  db.prepare(`
-    INSERT INTO user_sessions (userId, sessionToken, createdAt, expiresAt)
-    VALUES (?, ?, ?, ?)
-  `).run(user.id, token, now, expiresAt);
-
-  res.json({ token, user: { username: user.username, role: user.role } });
-});
-
-// Update the scanMode for a thermostat by ip using SQLite and db context
-const updateThermostatScanMode = (ip, scanMode) => {
-  return new Promise((resolve, reject) => {
-    db.transaction(
-      tx => {
-        tx.executeSql(
-          "UPDATE thermostats SET scanMode = ? WHERE ip = ?",
-          [scanMode, ip],
-          (_, result) => {
-            if (result.rowsAffected === 0) {
-              reject(new Error("No rows updated. IP may not exist."));
-            } else {
-              resolve(result);
-            }
-          },
-          (_, error) => {
-            console.error("SQL error:", error);
-            reject(error);
-            return false; // stops further error propagation
-          }
-        );
-      },
-      error => {
-        console.error("Transaction error:", error);
-        reject(error);
-      }
-    );
-  });
-};
-
-const updateThermostatScanMode2 = (ip, scanMode) => {
-    try {
-        // Database insertion
-        const stmt = db.prepare(`
-            UPDATE thermostats SET scanMode = ? WHERE ip = ?
-        `);
-        stmt.run(
-            scanMode,
-            ip
-        );
-
-        console.log(`Saved DB data for ${ip}: scanMode: `, scanMode);
-        return true;
-    } catch (error) {
-        console.log(`Error saving DB data for ${ip}: error: `, error);
-        return false;
-    }
-}
-
-const updateThermostatEnabled = (ip, enabled) => {
-    try {
-        // Database insertion
-        const stmt = db.prepare(`
-            UPDATE thermostats SET enabled = ? WHERE ip = ?
-        `);
-        stmt.run(
-            enabled,
-            ip
-        );
-
-        console.log(`Saved DB data for ${ip}: enabled: `, enabled);
-        return true;
-    } catch (error) {
-        console.log(`Error saving DB data for ${ip}: error: `, error);
-        return false;
-    }
-}
-
-const getThermostatScanMode = (ip) => {
-    const getThermostatIdStmt = db.prepare(`
-        SELECT scanInterval, scanMode FROM thermostats WHERE ip = ?;
-    `);
-
-    const thermostatRow = getThermostatIdStmt.get(ip);
-    if (thermostatRow) {
-        return [ thermostatRow.scanInterval, thermostatRow.scanMode ];
-    }
-    return undefined;
-}
-
-async function scannerIntervalTask(ip) {
-    try {
-        const [ scanInterval, scanMode ] = getThermostatScanMode(ip);
-        const thermostat_id = getIdByIP(ip);
-        let currentTime = Date.now();
-        let data = undefined;
-        if (scanMode !== undefined && scanMode === 0) {
-            console.error("Error: Thermostat scan mode is 0 (Disabled) for IP:", ip);
-            return;
-        }
-        if (scanMode === undefined || scanMode === 1) {
-            // Always get a valid service token
-            const token = getValidServiceToken();
-            const headers = { "Authorization": `Bearer ${token}` };
-
-            const response = await fetch(`http://localhost:5000/tstat/${ip}`, {
-                method: "GET",
-                headers
-            });
-            data = await response.json();
-
-            console.log(`Scanned data from ${ip}:`, data);
-
-            // Database insertion
-            const stmt = db.prepare(`
-                INSERT INTO scan_data (thermostat_id, timestamp, temp, tmode, tTemp, tstate, fstate)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `);
-            stmt.run(
-                thermostat_id,
-                currentTime,
-                data.temp,
-                data.tmode,
-                data.tmode === HVAC_MODE_COOL ? data.t_cool : data.tmode === HVAC_MODE_HEAT ? data.t_heat : null,
-                data.tstate,
-                data.fstate
-            );
-
-            console.log(`Saved DB data for ${ip}:`, data);
-        } else {
-            const getThermostatDataStmt = db.prepare(`
-                SELECT * FROM scan_data WHERE thermostat_id = ? ORDER BY timestamp DESC LIMIT 1;
-            `);
-
-            // Fetch thermostat_id from UUID
-            const thermostatRow = getThermostatDataStmt.get(thermostat_id);
-            const date = new Date(thermostatRow.timestamp);
-            const adjustedDay = (date.getDay() + 6) % 7; // Converts Sunday (0) to 6, Monday (1) to 0, etc.
-            const formattedTime = {
-                day: adjustedDay,
-                hour: date.getHours(),
-                minute: date.getMinutes()
-            };
-
-            // Convert to required format
-            data = {
-                temp: thermostatRow.temp,
-                tmode: thermostatRow.tmode,
-                tstate: thermostatRow.tstate,
-                fstate: thermostatRow.fstate,
-                time: formattedTime,
-            };
-            currentTime = thermostatRow.timestamp;
-
-            if (thermostatRow.tmode === HVAC_MODE_COOL) {
-                data.t_cool = thermostatRow.tTemp; // Use tTemp for cooling mode
-            } else if (thermostatRow.tmode === HVAC_MODE_HEAT) {
-                data.t_heat = thermostatRow.tTemp; // Use tTemp for heating mode
-            }
-            console.log(`Queried DB data for ${ip}:`, data);
-        }
-        cache[ip] = cache[ip] || { values: [] };
-        const updatedData = { timestamp: currentTime, ...data };
-        cache[ip].values.unshift(updatedData);
-        cache[ip].lastUpdated = currentTime;
-
-        if (cache[ip].values.length > CACHE_LIMIT) {
-            cache[ip].values.pop();
-        }
-    } catch (error) {
-        console.error(`Error scanning ${ip}:`, error);
-    }
-}
-
-const authRoutes = express.Router();
-
-authRoutes.use(authenticateToken);
-
-authRoutes.post('/logout', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.decode(token);
-    db.prepare('DELETE FROM user_sessions WHERE sessionToken = ?').run(token);
-  }
-  res.json({ message: "Logged out" });
-});
-
-authRoutes.get('/tokenInfo', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.decode(token);
-    if (decoded) {
-      res.json({
-        username: decoded.username,
-        role: decoded.role,
-        exp: decoded.exp,
-        iat: decoded.iat
-      });
-    } else {
-      res.status(401).json({ error: "Invalid token" });
-    }
-  }
-});
-
-authRoutes.get("/user", async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.decode(token);
-    const session = db.prepare('SELECT * FROM user_sessions WHERE sessionToken = ?').get(token);
-    if (!session || session.expiresAt < Math.floor(Date.now() / 1000)) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(session.userId);
-    if (!user) return res.status(404).json({ error: "User not found" });
-    res.json(user);
-  }
-  res.status(401).json({ error: "Unauthorized" });
-});
-
-// Users
-// GET /users → List users
-authRoutes.get('/users', async (req, res) => {
-  const users = db.prepare(`
-    SELECT u.id, u.username, u.email, u.enabled, r.name as role, u.roleId
-    FROM users u
-    JOIN roles r ON u.roleId = r.id
-  `).all();
-  res.json(users);
-});
-
-// POST /users → Add user
-authRoutes.post('/users', async (req, res) => {
-  const { username, email, password, roleId } = req.body;
-  if (!username || !email || !password || !roleId) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
-  const hashedPassword = await bcrypt.hash(password, 10);
-  db.prepare(`
-    INSERT INTO users (username, email, password, roleId, enabled)
-    VALUES (?, ?, ?, ?, 1)
-  `).run(username, email, hashedPassword, roleId);
-  res.json({ message: "User added" });
-});
-
-// PUT /users/:id → Update user (role, email, etc.)
-authRoutes.put('/users/:id', async (req, res) => {
-  const { email, roleId, password, enabled } = req.body;
-  const { id } = req.params;
-  let query = "UPDATE users SET ";
-  const params = [];
-  if (email) {
-    query += "email = ?, ";
-    params.push(email);
-  }
-  if (roleId) {
-    query += "roleId = ?, ";
-    params.push(roleId);
-  }
-  if (password) {
-    query += "password = ?, ";
-    params.push(bcrypt.hashSync(password, 10));
-  }
-  if (enabled !== undefined) {
-    query += "enabled = ?, ";
-    params.push(enabled ? 1 : 0);
-  }
-  query = query.replace(/, $/, " "); // Remove trailing comma
-  query += "WHERE id = ?";
-  params.push(id);
-  db.prepare(query).run(...params);
-  res.json({ message: "User updated" });
-});
-
-// POST /users/:id/disable → Set enabled to 0
-authRoutes.post('/users/:id/enabled', async (req, res) => {
-  const { id } = req.params;
-  const { enable } = req.body;
-  db.prepare("UPDATE users SET enabled = ? WHERE id = ?").run(enable, id);
-  res.json({ message: "User enabled/disabled" });
-});
-
-// Roles
-// GET /roles → List roles
-authRoutes.get('/roles', async (req, res) => {
-  const roles = db.prepare(`
-    SELECT * FROM roles
-  `).all();
-  res.json(roles);
-});
-
-authRoutes.get("/tstat/:ip", async (req, res) => {
+const getThermostatData = async (req, res) => {
     try {
         console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
         const ip = req.params.ip;
@@ -604,9 +48,9 @@ authRoutes.get("/tstat/:ip", async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: "Failed to retrieve thermostat data" });
     }
-});
+};
 
-authRoutes.post("/tstat/:ip", async (req, res) => {
+const updateThermostat = async (req, res) => {
     console.log(`${Date().toString()}: Received POST request: ${req.url}`); // Log the request body
     console.log("Request Body:", JSON.stringify(req.body, null, 2)); // Logs JSON with formatting
     const { tmode, temperature, time, fmode, hold, override } = req.body; // Get values from request
@@ -644,7 +88,7 @@ authRoutes.post("/tstat/:ip", async (req, res) => {
         const data = await response.json();
 
         // Ensure the token is passed when updating the cache
-        const response2 = await fetch(`http://localhost:5000/tstat/${ip}?noCache=true`, {
+        const response2 = await fetch(`http://localhost:${process.env.PORT || 5000}/tstat/${ip}?noCache=true`, {
             method: "GET",
             headers: { 
                 "Authorization": req.headers.authorization // Include the token
@@ -657,18 +101,17 @@ authRoutes.post("/tstat/:ip", async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: "Failed to update thermostat settings" });
     }
-});
+};
 
-// Get all cached data for an IP
-authRoutes.get("/cache/:ip", (req, res) => {
+const getCache = (req, res) => {
     const ip = req.params.ip;
     if (!cache[ip]) {
         return res.status(404).json({ error: "No cached data found for this IP" });
     }
     res.json(cache[ip].values);
-});
+};
 
-authRoutes.get("/model/:ip", async (req, res) => {
+const getModel = async (req, res) => {
     try {
         console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
         const ip = req.params.ip;
@@ -678,9 +121,9 @@ authRoutes.get("/model/:ip", async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: "Failed to retrieve thermostat model/version data" });
     }
-});
+};
 
-authRoutes.get("/name/:ip", async (req, res) => {
+const getName = async (req, res) => {
     try {
         console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
         const ip = req.params.ip;
@@ -690,9 +133,9 @@ authRoutes.get("/name/:ip", async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: "Failed to retrieve thermostat name data" });
     }
-});
+};
 
-authRoutes.get("/tswing/:ip", async (req, res) => {
+const getSwing = async (req, res) => {
     try {
         console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
         const ip = req.params.ip;
@@ -702,9 +145,9 @@ authRoutes.get("/tswing/:ip", async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: "Failed to retrieve thermostat swing data" });
     }
-});
+};
 
-authRoutes.get("/thermostat/:ip", async (req, res) => {
+const getThermostat = async (req, res) => {
     try {
         console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
         const { ip } = req.params;
@@ -738,9 +181,9 @@ authRoutes.get("/thermostat/:ip", async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: "Failed to retrieve thermostat data", details: error.message });
     }
-});
+};
 
-authRoutes.get("/thermostat/detailed/:ip", async (req, res) => {
+const getThermostatDetailed = async (req, res) => {
     try {
         console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
         const { ip } = req.params;
@@ -784,9 +227,9 @@ authRoutes.get("/thermostat/detailed/:ip", async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: "Failed to retrieve thermostat data", details: error.message });
     }
-});
+};
 
-authRoutes.get("/schedule/:scheduleMode/:ip", async (req, res) => {
+const getSchedule = async (req, res) => {
     try {
         console.log(`${new Date().toString()}: Received GET request: ${req.url}`);
 
@@ -810,9 +253,9 @@ authRoutes.get("/schedule/:scheduleMode/:ip", async (req, res) => {
         console.error("Error:", error);
         res.status(500).json({ error: "Failed to retrieve thermostat schedule data" });
     }
-});
+};
 
-authRoutes.get("/cloud/:ip", async (req, res) => {
+const getCloud = async (req, res) => {
     try {
         console.log(`${new Date().toString()}: Received GET request: ${req.url}`);
 
@@ -833,10 +276,9 @@ authRoutes.get("/cloud/:ip", async (req, res) => {
         console.error("Error:", error);
         res.status(500).json({ error: "Failed to retrieve thermostat cloud data" });
     }
-});
+};
 
-// **Proxy POST request (for updating thermostat name)**
-authRoutes.post("/thermostat/name/:ip", async (req, res) => {
+const updateName = async (req, res) => {
     console.log(`${Date().toString()}: Received POST request: ${req.url}`); // Log the request body
     const { name } = req.body; // Get values from request
     const { ip } = req.params;
@@ -861,10 +303,9 @@ authRoutes.post("/thermostat/name/:ip", async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: "Failed to update thermostat name" });
     }
-});
+};
 
-// **Proxy POST request (for updating thermostat name)**
-authRoutes.post("/tswing/:ip", async (req, res) => {
+const updateSwing = async (req, res) => {
     console.log(`${Date().toString()}: Received POST request: ${req.url}`); // Log the request body
     const { tswing } = req.body; // Get values from request
     const { ip } = req.params;
@@ -889,9 +330,9 @@ authRoutes.post("/tswing/:ip", async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: "Failed to update thermostat tswing" });
     }
-});
+};
 
-authRoutes.post("/schedule/:scheduleMode/:ip", async (req, res) => {
+const updateSchedule = async (req, res) => {
     try {
         console.log(`${new Date().toString()}: Received POST request: ${req.url}`);
 
@@ -935,9 +376,9 @@ authRoutes.post("/schedule/:scheduleMode/:ip", async (req, res) => {
         console.error("Error: ", error);
         res.status(500).json({ error: "Failed to update thermostat schedule data" });
     }
-});
+};
 
-authRoutes.post("/schedule/:scheduleMode/:day/:ip", async (req, res) => {
+const updateScheduleDay = async (req, res) => {
     try {
         console.log(`${new Date().toString()}: Received POST request: ${req.url}`);
 
@@ -976,9 +417,9 @@ authRoutes.post("/schedule/:scheduleMode/:day/:ip", async (req, res) => {
         console.error("Error: ", error);
         res.status(500).json({ error: "Failed to update thermostat schedule data" });
     }
-});
+};
 
-authRoutes.post("/cloud/:ip", async (req, res) => {
+const updateCloud = async (req, res) => {
     try {
         console.log(`${new Date().toString()}: Received POST request: ${req.url}`);
 
@@ -998,14 +439,6 @@ authRoutes.post("/cloud/:ip", async (req, res) => {
             req.body.enabled = req.body.scanMode === HVAC_SCAN_CLOUD ? 1 : 0; // Enable cloud if scanMode is HVAC_SCAN_CLOUD
 
             updateThermostatScanMode2(ip, req.body.scanMode);
-            // updateThermostatScanMode(ip, req.body.scanMode)
-            //     .then(() => {
-            //         // Successfully updated scanMode in the database
-            //         console.log(`Updated scanMode for IP ${ip} to ${req.body.scanMode}`);
-            //     })
-            //     .catch((error) => {
-            //         console.error(`Failed to update scanMode for IP ${ip}:`, error);
-            //     });
         }
         const payload = {
             interval: req.body.interval || 60, // Default to 60 seconds if not provided
@@ -1022,19 +455,17 @@ authRoutes.post("/cloud/:ip", async (req, res) => {
             body: JSON.stringify(payload).replace(", ", ",")
         });
     
-        const respData = await response.text(); //.json();
-        //console.log("POST response:", JSON.stringify(respData)); // Log the post response
-        console.log("POST response:", respData); // Log the post response
+        const respData = await response.text();
+        console.log("POST response:", respData);
         res.json(respData);
     } catch (error) {
         console.log("Error: ", error);
         console.error("Error: ", error);
         res.status(500).json({ error: "Failed to update thermostat cloud data" });
     }
-});
+};
 
-// Start scanner
-authRoutes.post("/scanner/start/:ip", (req, res) => {
+const startScanner = (req, res) => {
     const { ip } = req.params;
     const interval = req.body.interval || DEFAULT_SCAN_INTERVAL;
 
@@ -1052,10 +483,9 @@ authRoutes.post("/scanner/start/:ip", (req, res) => {
     console.log(`Scanner started for ${ip}: ${interval / 1000} seconds interval`);
 
     res.json({ message: `Scanner started for ${ip}.` });
-});
+};
 
-// Stop scanner
-authRoutes.post("/scanner/stop/:ip", (req, res) => {
+const stopScanner = (req, res) => {
     const { ip } = req.params;
 
     if (!scanners[ip]) {
@@ -1066,10 +496,9 @@ authRoutes.post("/scanner/stop/:ip", (req, res) => {
     delete scanners[ip];
 
     res.json({ message: `Scanner stopped for ${ip}.` });
-});
+};
 
-// Get running scanners
-authRoutes.get("/scanner/status", (req, res) => {
+const getScannerStatus = (req, res) => {
     const { ip } = req.query;
 
     if (ip) {
@@ -1086,10 +515,9 @@ authRoutes.get("/scanner/status", (req, res) => {
         interval: scanners[ip]._idleTimeout,
     }));
     res.json({ activeScanners: scannerDetails });
-});
+};
 
-// Get scanned data for a specific IP
-authRoutes.get("/scanner/data/:ip", (req, res) => {
+const getScannerData = (req, res) => {
     const { ip } = req.params;
 
     if (!cache[ip]) {
@@ -1136,20 +564,18 @@ authRoutes.get("/scanner/data/:ip", (req, res) => {
         });
     }
     res.json(cache[ip].values);
-});
+};
 
-// Get detailed status of all active scanners
-authRoutes.get("/scanner/details", (req, res) => {
+const getScannerDetails = (req, res) => {
     const scannerDetails = Object.keys(scanners).map((ip) => ({
         ip,
         interval: scanners[ip]._idleTimeout,
     }));
 
     res.json({ activeScanners: scannerDetails });
-});
+};
 
-// Restart scanner
-authRoutes.post("/scanner/restart/:ip", (req, res) => {
+const restartScanner = (req, res) => {
     const { ip } = req.params;
     const interval = req.body.interval || DEFAULT_SCAN_INTERVAL;
 
@@ -1168,10 +594,9 @@ authRoutes.post("/scanner/restart/:ip", (req, res) => {
     console.log(`Scanner restarted for ${ip}: ${interval / 1000} seconds interval`);
 
     res.json({ message: `Scanner restarted for ${ip}.` });
-});
+};
 
-// Example: Get daily usage for an IP
-authRoutes.get("/usage/daily/:ip", (req, res) => {
+const getDailyUsage = (req, res) => {
     const { ip } = req.params;
     const today = new Date().toISOString().slice(0, 10);
     const startOfDay = new Date(today).getTime();
@@ -1185,9 +610,9 @@ authRoutes.get("/usage/daily/:ip", (req, res) => {
 
     // ...calculate run times, kWh, cost as in previous answers...
     res.json(rows);
-});
+};
 
-authRoutes.get("/thermostats", (req, res) => {
+const getThermostats = (req, res) => {
     const rows = db.prepare(`
         SELECT * FROM thermostats
     `).all();
@@ -1195,33 +620,9 @@ authRoutes.get("/thermostats", (req, res) => {
     console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
     console.log("Thermostat rows:", JSON.stringify(rows, null, 2)); // Log the thermostat rows
     res.json(rows);
-    // if (rows.length) {
-    //     return JSON.stringify(rows, null, 2); // Converts rows into JSON format
-    // } else {
-    //     return JSON.stringify([]); // Returns empty JSON array if no data
-    // }
-    //res.json({ data: rows });
+};
 
-    // const getThermostatIdStmt = db.prepare(`
-    //     SELECT * FROM thermostats;
-    // `);
-
-    // const thermostatRows = getThermostatIdStmt.all(); // Use `.all()` to get multiple rows
-
-    // if (thermostatRows.length) {
-    //     return JSON.stringify(thermostatRows, null, 2); // Converts rows into JSON format
-    // } else {
-    //     return JSON.stringify([]); // Returns empty JSON array if no data
-    // }
-});
-
-authRoutes.get("/thermostatscan/:subnet", async (req, res) => {
-    const { subnet } = req.params;
-    const results = await scanSubnet(subnet, 3000);
-    res.json(results);
-});
-
-authRoutes.post("/thermostats", (req, res) => {
+const addThermostat = (req, res) => {
     const { uuid, ip, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, enabled } = req.body;
 
     if (!uuid ||!ip || !model || !location || !cloudUrl || !cloudAuthkey || !scanInterval || !scanMode) {
@@ -1238,9 +639,9 @@ authRoutes.post("/thermostats", (req, res) => {
     addThermostatStmt.run(uuid, ip, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, enabled2);
 
     res.status(201).json({ message: "Thermostat added successfully" });
-});
+};
 
-authRoutes.put("/thermostats/:ip", (req, res) => {
+const updateThermostats = (req, res) => {
     const { uuid, ip, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, enabled } = req.body;
 
     if (!uuid ||!ip || !model || !location || !cloudUrl || !cloudAuthkey || !scanInterval || !scanMode) {
@@ -1257,9 +658,9 @@ authRoutes.put("/thermostats/:ip", (req, res) => {
     updateThermostatStmt.run(uuid, model, location, cloudUrl, cloudAuthkey, scanInterval, scanMode, enabled2, ip);
 
     res.status(200).json({ message: "Thermostat updated successfully" });
-});
+};
 
-authRoutes.delete("/thermostats/:ip", (req, res) => {
+const deleteThermostat = (req, res) => {
     const { ip } = req.params;
 
     if (!ip) {
@@ -1275,7 +676,217 @@ authRoutes.delete("/thermostats/:ip", (req, res) => {
     }
 
     res.status(200).json({ message: "Thermostat disabled successfully" });
-});
+};
 
-app.use(authRoutes);
-app.listen(5000, () => console.log("Proxy running at http://localhost:5000"));
+const scanThermostats = async (req, res) => {
+    const { subnet } = req.params;
+    const results = await scanSubnet(subnet, 3000);
+    res.json(results);
+};
+
+const captureStatIn = (req, res) => {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress;
+    const currentTime = Date.now();
+    const bodyB = req.body;
+
+    console.log(`${crypto.formatUnixTime(currentTime)}: Received POST request: ${req.url}`); // Log the request body
+    if (process.env.DEBUG === "true") {
+        console.log("Streamed Binary Data:", bodyB); // Print raw binary stream
+    }
+
+    const offsetB = bodyB.indexOf(Buffer.from("}"));
+
+    if (offsetB === -1) {
+        res.status(400).send('Need a JSON header');
+        return;
+    }
+
+    const requestHdr = bodyB.slice(0, offsetB + 1);
+    let jsonHdr;
+
+    try {
+        jsonHdr = JSON.parse(requestHdr.toString());
+    } catch (err) {
+        res.status(400).send('Need a valid JSON header');
+        return;
+    }
+
+    if (!jsonHdr.uuid || !jsonHdr.eiv || jsonHdr.eiv.length !== 32) {
+        res.status(400).send('Invalid JSON header');
+        return;
+    }
+
+    let uuid, eiv;
+    try {
+        uuid = crypto.encode(jsonHdr.uuid);
+        eiv = crypto.fromhex(jsonHdr.eiv);
+    } catch (err) {
+        res.status(400).send('Invalid hex values in JSON header');
+        return;
+    }
+
+    if (uuid === undefined) {
+            uuid = crypto.encode(process.env.TEST_THERMOSTAT_UUID || "5cdad4517dda");
+    }
+
+        const authkey = crypto.encode(process.env.THERMOSTAT_AUTH_KEY || "beaa4c96");
+
+    if (process.env.DEBUG === "true") {
+        console.log(uuid.toString('hex')); // Convert back to string if needed
+        console.log(authkey.toString('hex'));
+    }
+
+    const aesKey = crypto.genAesKey(uuid, authkey);
+    const hashKey = crypto.genHashKey(authkey);
+
+    let requestPlaintext;
+    let responsePlaintext;
+
+    if (process.env.DEBUG === "true") {
+        console.log("Encryption data:");
+        console.log("UUID (Hex): ", uuid.toString('hex'))
+        console.log("AuthKey (Hex): ", authkey.toString('hex'))
+        console.log("AES Key (Hex): ", aesKey.toString('hex'));
+        console.log("Hash Key (Hex): ", hashKey.toString('hex'));
+        console.log("EIV Key (Hex): ", eiv.toString('hex'));
+    }
+
+    const encryptedData = bodyB.subarray(offsetB + 1);
+    if (process.env.DEBUG === "true") {
+        console.log("Length of Encrypted Data: ", encryptedData.length);
+        console.log("Encrypted Data (Hex): ", encryptedData.toString('hex'));
+    }
+    requestPlaintext = crypto.decAuth(aesKey, hashKey, eiv, encryptedData);
+    if (requestPlaintext === null || requestPlaintext === undefined) {
+        res.status(400).send('Decryption failed');
+        return;
+    }
+    console.log("[thermostat to us] =>", crypto.parseJSON(requestPlaintext));
+
+    const jsonString = requestPlaintext.toString("utf-8"); // Convert to string
+    const jsonData = JSON.parse(jsonString);  // Convert to JSON object
+    //console.log(jsonData);
+
+    if (jsonData.tstat) {
+        let thermostat_id = undefined; //getIdByUUID(jsonHdr.uuid);
+        let saveToDatabase = false;
+        let location = "";
+        if (!thermostat_id) {
+            // Prepare the query to get the thermostat ID from the UUID
+            const getThermostatIdStmt = db.prepare(`
+                SELECT id, scanMode, location FROM thermostats WHERE uuid = ?;
+            `);
+
+            try {
+                // Fetch thermostat_id from UUID
+                const thermostatRow = getThermostatIdStmt.get(jsonHdr.uuid);
+                if (!thermostatRow) {
+                    console.error("Error: Thermostat not found for UUID:", jsonHdr.uuid);
+                    return;
+                }
+                thermostat_id = thermostatRow.id;
+                location = thermostatRow.location;
+                saveToDatabase = thermostatRow.scanMode === HVAC_MODE_COOL; // Check if scanMode is set to HVAC_MODE_COOL
+                addDeviceByUUID(jsonHdr.uuid, thermostat_id);
+            } catch (error) {
+                console.error("Error: Thermostat not found for UUID:", jsonHdr.uuid);
+                console.log(`Error: Thermostat not found for UUID: ${jsonHdr.uuid}. Error: ${error}`);
+            }
+        }
+        if (process.env.DATABASE === "true" || saveToDatabase) {
+            // Database insertion
+            const stmt = db.prepare(`
+                INSERT INTO scan_data (thermostat_id, timestamp, temp, tmode, tTemp, tstate, fstate)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `);
+            try {
+                stmt.run(
+                    thermostat_id,
+                    currentTime,
+                    jsonData.tstat.temp,
+                    jsonData.tstat.tmode,
+                    jsonData.tstat.tmode === HVAC_MODE_COOL ? jsonData.tstat.t_cool : jsonData.tstat.tmode === HVAC_MODE_HEAT ? jsonData.tstat.t_heat : null,
+                    jsonData.tstat.tstate,
+                    jsonData.tstat.fstate,
+                );
+                console.log("Thermostat data saved: ", location);
+            } catch (error) {
+                console.log(`Error saving Thermostat data for: ${location}. Error: ${error}`);
+            }
+        }
+    }
+
+    if (process.env.FWD_URL) {
+        const patchedRequestPlaintext = crypto.hookRequest(requestPlaintext);
+        const newPayload = crypto.encAuth(aesKey, hashKey, eiv, patchedRequestPlaintext);
+        const newRequest = JSON.stringify({ uuid: jsonHdr.uuid, eiv: jsonHdr.eiv, payload: newPayload });
+
+        const parsedUrl = url.parse(process.env.FWD_URL);
+        const options = {
+            hostname: parsedUrl.hostname,
+            path: parsedUrl.path,
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' }
+        };
+
+        const forwardReq = http.request(options, forwardRes => {
+            let responseBody = [];
+            forwardRes.on('data', chunk => responseBody.push(chunk));
+            forwardRes.on('end', () => {
+                try {
+                    responsePlaintext = crypto.decAuth(aesKey, hashKey, eiv, Buffer.concat(responseBody));
+                    responsePlaintext = crypto.hookResponse(responsePlaintext);
+                } catch (err) {
+                    res.status(400).send('Forward URL returned malformed response');
+                    return;
+                }
+
+                console.log("[us to thermostat] <=", responsePlaintext.toString());
+                const responseEncrypted = crypto.encAuth(aesKey, hashKey, eiv, responsePlaintext);
+
+                res.status(200).header('Content-Type', 'application/octet-stream').send(responseEncrypted);
+            });
+        });
+
+        forwardReq.on('error', err => res.status(400).send('Forward request failed'));
+        forwardReq.write(newRequest);
+        forwardReq.end();
+    } else {
+        responsePlaintext = Buffer.from('{"ignore":0}');
+        console.log("[us to thermostat] <=", responsePlaintext.toString());
+
+        const responseEncrypted = crypto.encAuth(aesKey, hashKey, eiv, responsePlaintext);
+        res.status(200).header('Content-Type', 'application/octet-stream').send(responseEncrypted);
+    }
+};
+
+module.exports = {
+    getThermostatData,
+    updateThermostat,
+    getCache,
+    getModel,
+    getName,
+    getSwing,
+    getThermostat,
+    getThermostatDetailed,
+    getSchedule,
+    getCloud,
+    updateName,
+    updateSwing,
+    updateSchedule,
+    updateScheduleDay,
+    updateCloud,
+    startScanner,
+    stopScanner,
+    getScannerStatus,
+    getScannerData,
+    getScannerDetails,
+    restartScanner,
+    getDailyUsage,
+    getThermostats,
+    addThermostat,
+    updateThermostats,
+    deleteThermostat,
+    scanThermostats,
+    captureStatIn,
+};

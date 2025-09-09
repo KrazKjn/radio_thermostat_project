@@ -1,23 +1,17 @@
 const createExpoWebpackConfigAsync = require("@expo/webpack-config");
-const path = require('path');
 
 module.exports = async function (env, argv) {
   const config = await createExpoWebpackConfigAsync(env, argv);
 
-  // Aggressively transpile problematic node_modules
+  // Customize the config:
+  // - Ensure specific packages are transpiled by Babel.
   config.module.rules.push({
-    test: /\.m?js$/,
+    test: /\.js$/,
+    loader: 'babel-loader',
     include: [
-      path.resolve(__dirname, 'node_modules/react-native-web'),
-      path.resolve(__dirname, 'node_modules/react-native-vector-icons'),
-      path.resolve(__dirname, 'node_modules/@react-native'),
+      /node_modules\/react-native-web\//,
+      /node_modules\/react-native-vector-icons\//,
     ],
-    use: {
-      loader: 'babel-loader',
-      options: {
-        presets: ['babel-preset-expo'],
-      },
-    },
   });
 
   return config;

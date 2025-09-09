@@ -44,6 +44,7 @@
     "devDependencies": {
         "@babel/plugin-transform-private-methods": "^7.25.9",
         "@react-native-community/cli": "latest",
+        "babel-loader": "^8.2.3",
         "metro-config": "^0.82.1",
         "metro-react-native-babel-preset": "^0.77.0"
     }

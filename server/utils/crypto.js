@@ -12,7 +12,7 @@ const decompressZlib = (data) => {
 };
 
 function formatUnixTime(unixTimestamp) {
-    return new Date(unixTimestamp * 1000).toLocaleString();
+    return new Date(unixTimestamp).toLocaleString();
 }
 
 // Function to decode Hex

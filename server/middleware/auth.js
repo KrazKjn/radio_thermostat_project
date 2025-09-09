@@ -5,7 +5,7 @@ const authenticateToken = (req, res, next) => {
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1]; // Extract token from "Bearer <token>"
 
-    console.log(`authenticateToken received: ${token}`);
+    // console.log(`authenticateToken received: ${token}`);
 	if (!token) console.log("Unauthorized (401): No token provided");
     if (!token) return res.status(401).json({ error: "Unauthorized: No token provided" });
 

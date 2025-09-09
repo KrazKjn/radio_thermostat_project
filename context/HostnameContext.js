@@ -8,8 +8,8 @@ export const HostnameProvider = ({ children }) => {
   // For production, this should be replaced with the actual server URL.
   // For mobile, you'll need to use the IP address of your development machine.
   const backendUrl = Platform.select({
-    web: 'http://localhost:5000',
-    default: 'http://<your-dev-machine-ip>:5000', // Replace with your IP
+    web: 'http://localhost:3000',
+    default: 'http://<your-dev-machine-ip>:3000', // Replace with your IP
   });
 
   const [hostname, setHostname] = useState(backendUrl);

@@ -1,7 +1,7 @@
 const fetch = require("node-fetch");
 const db = require('../../db');
 const { getThermostatScanMode, updateThermostatScanMode2, updateThermostatEnabled, scannerIntervalTask, scanSubnet, addDeviceByUUID } = require('../services/thermostatService');
-const { convertToTwoDecimalFloat } = require('../utils/utils');
+const { convertToTwoDecimalFloat, formatTimestamp } = require('../utils/utils');
 const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
 const { HVAC_SCAN_CLOUD } = require('../../constants/hvac_scan');
 const crypto = require('../utils/crypto');

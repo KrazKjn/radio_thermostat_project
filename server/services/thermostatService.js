@@ -6,6 +6,11 @@ const axios = require("axios");
 const { getValidServiceToken } = require('./authService');
 const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
 
+// Cache object to store thermostat data by IP
+//const { cache, CACHE_LIMIT } = require('./controllers/thermostatController');
+const cache = {};
+const CACHE_LIMIT = 120; // Limit cache size to 120 entries
+
 const ipToIdMap = {};  // Object to store IP → ID mappings
 const uuidToIdMap = {};  // Object to store UUID → ID mappings
 

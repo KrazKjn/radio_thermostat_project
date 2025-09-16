@@ -14,6 +14,7 @@ import commonStyles from "../styles/commonStyles";
 import OptionsInfo from "./OptionsInfo";
 import UserManagement from "./UserManagement";
 import { UserContext } from '../context/UserContext';
+import DataRefreshContext from "../context/DataRefreshContext";
 
 const ThermostatDisplay = ({
     thermostat,
@@ -23,16 +24,31 @@ const ThermostatDisplay = ({
     hostname,
     getCurrentTemperature,
     updateThermostatName,
+    rebootThermostatServer,
     activeScreen,
     setActiveScreen,
     updateThermostatTime
 }) => {
     const { users, updateUser, disableUser } = useContext(UserContext);
+    const { register } = useContext(DataRefreshContext);
     const showTempControlModes = new Set([1, 2]);
     const showMenu = true;
     const intervalRef = useRef();
 
     // Poll for temperature every 60 seconds in home mode
+    useEffect(() => {
+        if (typeof getCurrentTemperature === "function") {
+            // Initial fetch
+            getCurrentTemperature(thermostatIp, hostname, token);
+            // Subscribe to refresh
+            const unsubscribe = register(() => {
+                console.log("[ThermostatDisplay] Timer triggered, refreshing temperature");
+                getCurrentTemperature(thermostatIp, hostname, token);
+            });
+            return () => unsubscribe();
+        }
+    }, [activeScreen, thermostatIp, hostname, token, getCurrentTemperature, register]);
+/*
     useEffect(() => {
         // Only poll in home mode and if getCurrentTemperature is provided
         if (activeScreen === "home" && typeof getCurrentTemperature === "function") {
@@ -51,7 +67,7 @@ const ThermostatDisplay = ({
             }
         };
     }, [activeScreen, thermostatIp, hostname, token, getCurrentTemperature]);
-
+*/
     // Handler to update a user
     const handleUserUpdate = async (userId, updates) => {
         try {
@@ -69,6 +85,22 @@ const ThermostatDisplay = ({
             // Optionally show a success message or refresh users
         } catch (err) {
             // Handle error (show message, etc.)
+        }
+    };
+
+    const rebootThermostat = async (thermostatIp, hostname, token) => {
+        try {
+            const confirmed = window.confirm("Are you sure you want to reboot the thermostat?");
+            if (!confirmed) {
+                console.log("Reboot canceled by user.");
+                return;
+            }
+
+            console.log("Rebooting thermostat...");
+            await rebootThermostatServer(thermostatIp, hostname, token);
+            console.log("Thermostat rebooted successfully");
+        } catch (error) {
+            console.error("Error rebooting thermostat:", error);
         }
     };
 
@@ -228,6 +260,10 @@ const ThermostatDisplay = ({
                     <TouchableOpacity style={commonStyles.menuItem} onPress={() => getCurrentTemperature(thermostatIp, hostname, token, false)} >
                         <Icon name="refresh-outline" size={28} color={"#0ff"} />
                         <Text style={commonStyles.menuText}>Refresh</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => rebootThermostat(thermostatIp, hostname, token)} >
+                        <Icon name="reload-outline" size={28} color={"#0ff"} />
+                        <Text style={commonStyles.menuText}>Reboot</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={commonStyles.menuItem} onPress={logout} >
                         <Icon name="log-out-outline" size={28} color={"#dc3545"} />

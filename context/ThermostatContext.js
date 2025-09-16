@@ -19,6 +19,16 @@ export const ThermostatProvider = ({ children }) => {
       .padStart(2, "0")} ${AMPM}`;
   };
 
+  const formatCurrentTime = () => {
+    const now = new Date(Date.now());
+    // Adjust day to match your format (0 = Monday, 6 = Sunday)
+    const jsDay = now.getDay(); // JS: 0=Sunday, 1=Monday, ..., 6=Saturday
+    const day = (jsDay === 0) ? 6 : jsDay - 1; // Convert JS day to your format
+    let hour = now.getHours();
+    const minute = now.getMinutes();
+    return formatTime({ day, hour, minute });
+  };
+
   function decodeJwt(token) {
     if (!token) return null;
     const parts = token.split('.');
@@ -96,6 +106,33 @@ export const ThermostatProvider = ({ children }) => {
     }
   };
 
+  const rebootThermostatServer = async (thermostatIp, hostname, tokenOverride) => {
+    try {
+      console.log("Rebooting thermostat...");
+      const data = await apiFetch(
+        `${hostname}/thermostat/reboot/${thermostatIp}`,
+        "POST",
+        null,
+        tokenOverride ?? token,
+        "Failed to reboot thermostat",
+        "Rebooting thermostat...",
+        logout
+      );
+      if (data) {
+        console.log("Thermostat rebooted successfully:", data);
+        updateThermostatState(thermostatIp, {
+            thermostatInfo: {
+                ...thermostats[thermostatIp].thermostatInfo,
+                status: "rebooting",
+            },
+        });
+      }
+    } catch (error) {
+      console.error("Error rebooting thermostat:", error);
+      throw new Error("Failed to reboot thermostat.");
+    }
+  };
+
   const updateThermostatTargetTemperature = async (thermostatIp, hostname, tokenOverride, tempMode, targetTemp) => {
     try {
       const data = await apiFetch(
@@ -135,13 +172,18 @@ export const ThermostatProvider = ({ children }) => {
         );
         if (data) {
             console.log("ThermostatContext: Fetched thermostat data:", data);
-
-            // Fetch additional data (model info and name)
-            const modelInfo = await fetchModelInfo(thermostatIp, hostname, tokenOverride ?? token);
+            let modelInfo = null;
+            try {
+                // Fetch additional data (model info and name)
+                modelInfo = await fetchModelInfo(thermostatIp, hostname, tokenOverride ?? token);
+            } catch (error) {
+                console.error("Error fetching model info:", error);
+                // modelInfo stays null
+            }
 
             // Update the context with the fetched data
-            updateThermostatState(thermostatIp, {
-                //...data,
+            // Build the update object
+            const updateObj = {
                 currentTemp: data.temp,
                 targetTemp: data.tmode === HVAC_MODE_COOL ? data.t_cool : data.t_heat || null,
                 currentTempMode: data.tmode,
@@ -152,14 +194,20 @@ export const ThermostatProvider = ({ children }) => {
                 formattedTime: data.time ? formatTime(data.time) : "Loading...",
                 override: data.override,
                 hold: data.hold,
-                thermostatInfo: {
-                    ip: thermostatIp,
-                    model: modelInfo?.model,
-                    name: modelInfo?.name,
-                },
-                thermostatName: modelInfo?.name,
                 lastUpdated: Date.now(),
-            });
+            };
+
+            // Only add modelInfo if it exists
+            if (modelInfo) {
+                updateObj.thermostatInfo = {
+                    ip: thermostatIp,
+                    model: modelInfo.model,
+                    name: modelInfo.name,
+                };
+                updateObj.thermostatName = modelInfo.name;
+            }
+
+            updateThermostatState(thermostatIp, updateObj);
 
             return data;
         }
@@ -177,7 +225,7 @@ export const ThermostatProvider = ({ children }) => {
         if (
             useCache &&
             currentThermostat?.lastUpdated &&
-            Date.now() - currentThermostat.lastUpdated < 1000 * 60 * currentThermostat.refreshInterval
+            Date.now() - currentThermostat.lastUpdated < 1000 * 60
         ) {
             console.log("Using cached thermostat data.");
             return currentThermostat;
@@ -211,6 +259,7 @@ export const ThermostatProvider = ({ children }) => {
 
             // Update the context with the fetched model info
             updateThermostatState(thermostatIp, {
+                formattedTime: formatCurrentTime(),
                 thermostatName: data.name,
                 thermostatInfo: {
                     ...thermostats[thermostatIp]?.thermostatInfo,
@@ -243,6 +292,7 @@ export const ThermostatProvider = ({ children }) => {
 
             // Update the context with the fetched model info
             updateThermostatState(thermostatIp, {
+                formattedTime: formatCurrentTime(),
                 thermostatName: data.name,
                 thermostatInfo: {
                     ...thermostats[thermostatIp]?.thermostatInfo,
@@ -281,6 +331,7 @@ export const ThermostatProvider = ({ children }) => {
 
                         if (data?.model) {
                             updateThermostatState(ip, {
+                                formattedTime: formatCurrentTime(),
                                 thermostatInfo: {
                                     ip,
                                     model: data.model,
@@ -320,6 +371,7 @@ export const ThermostatProvider = ({ children }) => {
 
             // Update the context with the fetched name
             updateThermostatState(thermostatIp, {
+                formattedTime: formatCurrentTime(),
                 thermostatName: data.name,
                 thermostatInfo: {
                     ...thermostats[thermostatIp]?.thermostatInfo,
@@ -378,7 +430,10 @@ export const ThermostatProvider = ({ children }) => {
             console.log("Thermostat time updated successfully:", data);
 
             // Update the state with the new time
-            updateThermostatState(thermostatIp, { currentTime: data.time });
+            updateThermostatState(thermostatIp, {
+                formattedTime: formatCurrentTime(),
+                currentTime: data.time
+            });
         }
     } catch (error) {
         console.error("Error updating thermostat time:", error);
@@ -395,7 +450,10 @@ export const ThermostatProvider = ({ children }) => {
         }
 
         // Optimistically update the state
-        updateThermostatState(thermostatIp, { currentTempMode: newMode });
+        updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
+            currentTempMode: newMode
+         });
 
         // Make the API call to update the mode
         const data = await apiFetch(
@@ -411,6 +469,7 @@ export const ThermostatProvider = ({ children }) => {
         if (!data || (data && data.success !== 0)) {
             // Revert the state on error
             updateThermostatState(thermostatIp, {
+                formattedTime: formatCurrentTime(),
                 currentTempMode: currentThermostat?.currentTempMode,
             });
         }
@@ -420,6 +479,7 @@ export const ThermostatProvider = ({ children }) => {
         // Revert the state on error
         const currentThermostat = thermostats[thermostatIp];
         updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
             currentTempMode: currentThermostat?.currentTempMode,
         });
     }
@@ -434,7 +494,10 @@ export const ThermostatProvider = ({ children }) => {
         }
 
         // Optimistically update the state
-        updateThermostatState(thermostatIp, { currentFanMode: newMode });
+        updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
+            currentFanMode: newMode
+        });
 
         // Make the API call to update the fan mode
         const data = await apiFetch(
@@ -450,6 +513,7 @@ export const ThermostatProvider = ({ children }) => {
         if (!data || (data && data.success !== 0)) {
             // Revert the state on error
             updateThermostatState(thermostatIp, {
+                formattedTime: formatCurrentTime(),
                 currentFanMode: currentThermostat?.currentFanMode,
             });
         }
@@ -459,6 +523,7 @@ export const ThermostatProvider = ({ children }) => {
         // Revert the state on error
         const currentThermostat = thermostats[thermostatIp];
         updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
             currentFanMode: currentThermostat?.currentFanMode,
         });
     }
@@ -473,7 +538,10 @@ export const ThermostatProvider = ({ children }) => {
         }
 
         // Optimistically update the state
-        updateThermostatState(thermostatIp, { hold: newMode });
+        updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
+            hold: newMode
+        });
 
         // Make the API call to update the hold mode
         const data = await apiFetch(
@@ -487,13 +555,19 @@ export const ThermostatProvider = ({ children }) => {
         );
 
         // Update the state with the response
-        updateThermostatState(thermostatIp, { hold: newMode });
+        updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
+            hold: newMode
+        });
     } catch (error) {
         console.error("Error updating hold mode:", error);
 
         // Revert the state on error
         const currentThermostat = thermostats[thermostatIp];
-        updateThermostatState(thermostatIp, { hold: currentThermostat?.hold });
+        updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
+            hold: currentThermostat?.hold
+        });
     }
   };
 
@@ -506,7 +580,10 @@ export const ThermostatProvider = ({ children }) => {
         }
 
         // Optimistically update the state
-        updateThermostatState(thermostatIp, { override: newMode });
+        updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
+            override: newMode
+        });
 
         // Make the API call to update the override mode
         const data = await apiFetch(
@@ -520,13 +597,19 @@ export const ThermostatProvider = ({ children }) => {
         );
 
         // Update the state with the response
-        updateThermostatState(thermostatIp, { override: newMode });
+        updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
+            override: newMode
+        });
     } catch (error) {
         console.error("Error updating override mode:", error);
 
         // Revert the state on error
         const currentThermostat = thermostats[thermostatIp];
-        updateThermostatState(thermostatIp, { override: currentThermostat?.override });
+        updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
+            override: currentThermostat?.override
+        });
     }
   };
 
@@ -564,7 +647,10 @@ export const ThermostatProvider = ({ children }) => {
             );
 
             const swingValue = data?.tswing !== undefined ? -data.tswing : 1.0; // Default to 1.0 if undefined
-            updateThermostatState(thermostatIp, { swingValue });
+            updateThermostatState(thermostatIp, {
+                formattedTime: formatCurrentTime(),
+                swingValue: swingValue ?? "Loading...",                
+            });
             return swingValue;
         } catch (error) {
             console.error("Error fetching thermostat swing value:", error);
@@ -587,7 +673,10 @@ export const ThermostatProvider = ({ children }) => {
             logout
         );
 
-        updateThermostatState(thermostatIp, { swingValue: value });
+        updateThermostatState(thermostatIp, {
+            formattedTime: formatCurrentTime(),
+            swingValue: value
+        });
         console.log("Swing updated:", data);
     } catch (error) {
         console.error("Error updating swing:", error);
@@ -910,6 +999,7 @@ export const ThermostatProvider = ({ children }) => {
             fetchThermostatData,
             getCurrentTemperature,
             updateThermostatName,
+            rebootThermostatServer,
             updateThermostatTargetTemperature,
             fetchModelInfo,
             fetchModelInfoDetailed,
@@ -930,6 +1020,7 @@ export const ThermostatProvider = ({ children }) => {
             fetchScannedData,
             scannerStatus,
             formatTime,
+            formatCurrentTime,
             isTokenExpired,
             getSchedule,
             updateSchedule,

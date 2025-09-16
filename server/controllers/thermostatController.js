@@ -19,12 +19,24 @@ const getThermostatData = async (req, res) => {
         const ip = req.params.ip;
         const currentTime = Date.now();
         const noCache = req.query.noCache === "true"; // Check for cache override
+        let expiredData = false;
 
+        cache[ip] = cache[ip] || { values: [] };
+        if (typeof cache[ip].lastUpdated === "number") {
+            expiredData = currentTime - cache[ip].lastUpdated < CACHE_EXPIRATION;
+        }
+        if (cache[ip].source !== 'cloud') {
+            expiredData = currentTime - cache[ip].lastUpdated < (DEFAULT_SCAN_INTERVAL + CACHE_EXPIRATION);
+        }
         // Use cached data if it's recent and cache override is NOT requested
-        if (!noCache && cache[ip] && currentTime - cache[ip].lastUpdated < CACHE_EXPIRATION) {
-            console.log("Returning cached data");
+        if (!noCache &&
+            cache[ip]?.values?.length &&
+            expiredData) {
+            console.log(`[Thermostat] Returning cached data for IP ${ip}`);
             return res.json(cache[ip].values[0]); // Return the most recent cached value
         }
+        console.log(`[Thermostat] Fetching new data for IP ${ip}`);
+        console.log(`[Thermostat] noCache: ${noCache}, cache exists: ${!!cache[ip]}, cache length: ${cache[ip]?.values?.length}, lastUpdated: ${new Date(cache[ip]?.lastUpdated).toString()}, currentTime: ${new Date(currentTime).toString()}, time since last update: ${currentTime - (cache[ip]?.lastUpdated || 0)}`);
 
         // Fetch new data
         const response = await fetch(`http://${ip}/tstat`);
@@ -32,16 +44,19 @@ const getThermostatData = async (req, res) => {
 
         // Update cache
         cache[ip] = cache[ip] || { values: [] };
-        const [ scanInterval, scanMode ] = getThermostatScanMode(ip);
-        data.scanMode = scanMode;
-        data.scanInterval = scanInterval;
-        const updatedData = { timestamp: currentTime, ...data }
-        cache[ip].values.unshift(updatedData); // Add new value to the start
-        cache[ip].lastUpdated = currentTime;
+        if (cache[ip].source !== 'cloud') {
+            console.log(`[Thermostat] Updating cached data for IP ${ip}`);
+            const [ scanInterval, scanMode ] = getThermostatScanMode(ip);
+            data.scanMode = scanMode;
+            data.scanInterval = scanInterval;
+            const updatedData = { timestamp: currentTime, ...data }
+            cache[ip].values.unshift(updatedData); // Add new value to the start
+            cache[ip].lastUpdated = currentTime;
 
-        // Limit cache size
-        if (cache[ip].values.length > CACHE_LIMIT) {
-            cache[ip].values.pop(); // Remove oldest value
+            // Limit cache size
+            if (cache[ip].values.length > CACHE_LIMIT) {
+                cache[ip].values.pop(); // Remove oldest value
+            }
         }
 
         res.json(data);
@@ -270,6 +285,9 @@ const getCloud = async (req, res) => {
         const [ scanInterval, scanMode ] = getThermostatScanMode(ip);
         data.scanMode = scanMode;
         data.scanInterval = scanInterval;
+        if (cache[ip] && 'source' in cache[ip]) {
+            data.source = cache[ip].source;
+        }
 
         res.json(data);
     } catch (error) {
@@ -302,6 +320,24 @@ const updateName = async (req, res) => {
         res.json(data);
     } catch (error) {
         res.status(500).json({ error: "Failed to update thermostat name" });
+    }
+};
+
+const rebootServer = async (req, res) => {
+    console.log(`${Date().toString()}: Received POST request: ${req.url}`); // Log the request body
+    const { ip } = req.params;
+
+    try {
+        const response = await fetch(`http://${ip}/sys/command`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ command: "reboot" })
+        });
+
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to reboot thermostat" });
     }
 };
 
@@ -517,45 +553,54 @@ const getScannerStatus = (req, res) => {
     res.json({ activeScanners: scannerDetails });
 };
 
-const getScannerData = (req, res) => {
-    const { ip } = req.params;
-
+function getScannerDataByIp(ip) {
     if (!cache[ip]) {
-        return res.status(404).json({ error: `No scanned data found for IP ${ip}.` });
+        console.warn(`[Thermostat] No cached data for IP ${ip}. Initializing empty array.`);
+        cache[ip] = [];
     }
-    if (!cache[ip] || cache[ip].values.length < CACHE_LIMIT) {
+
+    if (!cache[ip].values || cache[ip].values.length < CACHE_LIMIT) {
         const totalRows = db.prepare(`
             SELECT COUNT(*) as count FROM thermostat_readings WHERE ip = ?;
         `).get(ip).count;
 
+        const queryStatement = `
+            SELECT datetime(timestamp / 1000, 'unixepoch') AS formatted_date, * FROM thermostat_readings
+            WHERE ip = '${ip}' 
+            ORDER BY timestamp DESC
+            LIMIT ${CACHE_LIMIT}
+        `;
         const rows = db.prepare(`
-            SELECT * FROM thermostat_readings
+            SELECT datetime(timestamp / 1000, 'unixepoch') AS formatted_date, * FROM thermostat_readings
             WHERE ip = ? 
             ORDER BY timestamp DESC
-            LIMIT ${CACHE_LIMIT} OFFSET ${Math.min(cache[ip].values.length, totalRows)}
+            LIMIT ${CACHE_LIMIT}
         `).all(ip);
 
-        // ...calculate run times, kWh, cost as in previous answers...
+        const dbInfo = db.prepare('PRAGMA database_list').get();
+        console.log(`Full database path: ${dbInfo.file}`);
+        console.log(`Executing query: ${queryStatement}`);
+        console.log(`Fetched ${rows.length} rows out of ${totalRows} total rows for IP ${ip}.`);
+
         cache[ip].values = rows.map(row => {
-            let entry = {
+            const entry = {
                 timestamp: row.timestamp,
                 temp: row.temp,
                 tmode: row.tmode,
                 fmode: 0,
                 override: 0,
-                hold:  0,
+                hold: 0,
                 tstate: row.tstate,
                 fstate: row.fstate,
                 t_type_post: 0,
-                time: formatTimestamp(row.timestamp)
+                time: formatTimestamp(row.timestamp),
+                formatted_date: row.formatted_date
             };
 
-            // Add t_cool only if tmode is HVAC_MODE_COOL
             if (row.tmode === HVAC_MODE_COOL) {
                 entry.t_cool = row.tTemp;
             }
 
-            // Add t_heat only if tmode is HVAC_MODE_HEAT
             if (row.tmode === HVAC_MODE_HEAT) {
                 entry.t_heat = row.tTemp;
             }
@@ -563,7 +608,14 @@ const getScannerData = (req, res) => {
             return entry;
         });
     }
-    res.json(cache[ip].values);
+
+    return cache[ip].values;
+}
+
+const getScannerData = (req, res) => {
+    const { ip } = req.params;
+    const data = getScannerDataByIp(ip);
+    res.json(data);
 };
 
 const getScannerDetails = (req, res) => {
@@ -685,7 +737,7 @@ const scanThermostats = async (req, res) => {
 };
 
 const captureStatIn = (req, res) => {
-    const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress;
+    const ip = (req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress).replace(/^::ffff:/, '');
     const currentTime = Date.now();
     const bodyB = req.body;
 
@@ -765,7 +817,6 @@ const captureStatIn = (req, res) => {
 
     const jsonString = requestPlaintext.toString("utf-8"); // Convert to string
     const jsonData = JSON.parse(jsonString);  // Convert to JSON object
-    //console.log(jsonData);
 
     if (jsonData.tstat) {
         let thermostat_id = undefined; //getIdByUUID(jsonHdr.uuid);
@@ -810,6 +861,24 @@ const captureStatIn = (req, res) => {
                     jsonData.tstat.fstate,
                 );
                 console.log("Thermostat data saved: ", location);
+                if (!cache[ip]) {
+                    getScannerDataByIp(ip); // Initialize cache if not present
+                }
+
+                // Update cache
+                cache[ip] = cache[ip] || { values: [] };
+                const [ scanInterval, scanMode ] = getThermostatScanMode(ip);
+                jsonData.tstat.scanMode = scanMode;
+                jsonData.tstat.scanInterval = scanInterval;
+                const updatedData = { timestamp: currentTime, ...jsonData.tstat }
+                cache[ip].values.unshift(updatedData); // Add new value to the start
+                cache[ip].lastUpdated = currentTime;
+                cache[ip].source = 'cloud';
+
+                // Limit cache size
+                if (cache[ip].values.length > CACHE_LIMIT) {
+                    cache[ip].values.pop(); // Remove oldest value
+                }
             } catch (error) {
                 console.log(`Error saving Thermostat data for: ${location}. Error: ${error}`);
             }
@@ -872,6 +941,7 @@ module.exports = {
     getSchedule,
     getCloud,
     updateName,
+    rebootServer,
     updateSwing,
     updateSchedule,
     updateScheduleDay,

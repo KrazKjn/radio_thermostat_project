@@ -49,12 +49,25 @@ const login = async (req, res) => {
 };
 
 const logout = (req, res) => {
+    // Accept token from Authorization header, body, or query
+    let token = null;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.split(" ")[1];
-      db.prepare('DELETE FROM user_sessions WHERE sessionToken = ?').run(token);
+        token = authHeader.split(" ")[1];
     }
-    res.json({ message: "Logged out" });
+    if (!token && req.body.token) {
+        token = req.body.token;
+    }
+    if (!token && req.query.token) {
+        token = req.query.token;
+    }
+
+    if (token) {
+        db.prepare('DELETE FROM user_sessions WHERE sessionToken = ?').run(token);
+        res.json({ message: "Logged out" });
+    } else {
+        res.status(400).json({ error: "No token provided for logout" });
+    }
 };
 
 const tokenInfo = (req, res) => {

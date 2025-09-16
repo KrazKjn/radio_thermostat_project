@@ -8,11 +8,13 @@ import { useAuth } from "../context/AuthContext";
 import { HostnameContext } from "../context/HostnameContext";
 import commonStyles from "../styles/commonStyles";
 import { HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO } from '../constants/hvac_mode'; // Import HVAC modes
+import DataRefreshContext from "../context/DataRefreshContext";
 
 const DataChart = ({ thermostatIp, parentComponent = null }) => {
     const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
-    const { fetchScannedData, getScannerStatus, startScanner, stopScanner, thermostats, updateThermostatState, formatTime, isTokenExpired } = useThermostat();
+    const { register } = React.useContext(DataRefreshContext);
+    const { fetchScannedData, getScannerStatus, startScanner, stopScanner, thermostats, updateThermostatState, formatTime, formatCurrentTime, isTokenExpired,  } = useThermostat();
     const [dataPoints, setDataPoints] = useState([]);
     const [isScannerOn, setIsScannerOn] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(false);
@@ -26,8 +28,27 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
     const fetchData = async () => {
         try {
             const scannedData = await fetchScannedData(thermostatIp, hostname, token);
-            const filteredData = scannedData.filter(entry => entry.temp !== 0);
-            setDataPoints(filteredData.reverse()); // Reverse to show newest data on the right
+            let localDateTime = new Date(Date.now()).toLocaleString();
+            console.log(`${localDateTime} [DataChart] Data fetched: `, scannedData);
+            let filteredData = scannedData.filter(entry => entry.temp !== 0);
+            localDateTime = new Date(Date.now()).toLocaleString();            
+            console.log(`${localDateTime} [DataChart] Data fetched (filteredData): `, filteredData);
+            setDataPoints(prev => {
+                // Check if lastUpdated is in ascending order
+                const isAscending = filteredData.length > 1 &&
+                filteredData[0].lastUpdated < filteredData[filteredData.length - 1].lastUpdated;
+
+                // Reverse to show newest data on the right
+                const tempData = isAscending ? filteredData : [...filteredData].reverse();
+
+                // Log if data actually changed
+                if (JSON.stringify(prev) !== JSON.stringify(tempData)) {
+                    console.log("[DataChart] Updating chart data");
+                } else {
+                    console.log("[DataChart] Data unchanged, no update");
+                }
+                return tempData;
+            });
         } catch (error) {
             console.error("Error fetching scanned data:", error);
         }
@@ -55,7 +76,10 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
 
     useEffect(() => {
         fetchData();
-    }, [thermostatIp]);
+        // Subscribe to central refresh
+        const unsubscribe = register(fetchData);
+        return () => unsubscribe();
+    }, [thermostatIp, register]);
 
     // Handle toggle change
     const handleToggleChange = async (value) => {
@@ -128,7 +152,10 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                     if (hasDifference) {
                         updateThermostatState(thermostatIp, latestScan);
                     }
-                    setDataPoints(scannedData.reverse());
+                    // Check if lastUpdated is in ascending order
+                    const isAscending = scannedData.length > 1 &&
+                    scannedData[0].lastUpdated < scannedData[scannedData.length - 1].lastUpdated;
+                    setDataPoints(isAscending ? scannedData : [...scannedData].reverse());
                 }
             } catch (error) {
                 console.error("Error refreshing scanned data:", error);

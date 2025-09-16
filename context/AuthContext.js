@@ -42,7 +42,8 @@ export const AuthProvider = ({ children }) => {
     const logout = async () => {
         const token = await AsyncStorage.getItem("auth_token");
         if (token) {
-            const data = await apiFetch(`${hostname}/logout`, "POST", null, token);
+            // Sending the token in the body to logout. If the token is expired, the server can still process the logout.
+            const data = await apiFetch(`${hostname}/logout`, "POST", { token });
         }
         await AsyncStorage.removeItem("auth_token");
         setToken(null);
@@ -74,8 +75,31 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // Function to update both token and token info
+    const updateAuth = async (newToken) => {
+        setToken(newToken);
+        try {
+            const decoded = await apiFetch(
+                `${hostname}/tokenInfo`, 
+                "GET", 
+                null, 
+                newToken,
+                null,
+                null,
+                null,
+                30000,
+                null  // Pass null to prevent infinite recursion
+            );
+            if (decoded) {
+                setTokenInfo(decoded);
+            }
+        } catch (error) {
+            console.error("Error updating token info:", error);
+        }
+    };
+    
     return (
-        <AuthContext.Provider value={{ token, tokenInfo, login, logout }}>
+        <AuthContext.Provider value={{ token, tokenInfo, updateAuth, login, logout }}>
             {children}
         </AuthContext.Provider>
     );

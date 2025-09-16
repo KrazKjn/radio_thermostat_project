@@ -1,5 +1,14 @@
+const fs = require('fs');
+const path = require('path');
 const Database = require('better-sqlite3');
-const db = new Database('thermostat_data.db');
+const dbPath = path.resolve(__dirname, './thermostat_data.db'); // Adjust relative path as needed
+
+// Check if the file exists
+if (!fs.existsSync(dbPath)) {
+    //throw new Error(`Database file not found at path: ${dbPath}`);
+    console.log(`Creating new Database at path: ${dbPath}`);
+}
+const db = new Database(dbPath);
 
 // Create tables if they don't exist
 db.exec(`

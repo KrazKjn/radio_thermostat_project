@@ -6,6 +6,7 @@ import { useAuth, AuthProvider } from "./context/AuthContext";
 import { ThermostatProvider } from "./context/ThermostatContext";
 import LoginScreen from "./components/LoginScreen";
 import { UserProvider } from './context/UserContext';
+import { DataRefreshProvider } from "./context/DataRefreshContext";
 
 const showAlert = () => {
   if (Platform.OS === "web") {
@@ -45,8 +46,10 @@ const App = () => {
       <AuthProvider>
         <UserProvider>
           <ThermostatProvider>
-            <AppContent />
-          </ThermostatProvider>
+            <DataRefreshProvider>
+              <AppContent />
+            </DataRefreshProvider>
+          </ThermostatProvider>            
         </UserProvider>
       </AuthProvider>
     </HostnameProvider>

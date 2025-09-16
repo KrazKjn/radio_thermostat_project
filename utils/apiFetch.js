@@ -1,4 +1,6 @@
-const apiFetch = async (hostname, endpoint, method = "GET", body = null, token = null, errorMessage = null, logMessage = null, logoutFn = null, timeout = 30000) => {
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const apiFetch = async (url, method = "GET", body = null, token = null, errorMessage = null, logMessage = null, logoutFn = null, timeout = 30000) => {
   const headers = {
     "Content-Type": "application/json",
   };
@@ -17,13 +19,23 @@ const apiFetch = async (hostname, endpoint, method = "GET", body = null, token =
   let response = null;
   try {
     // Set a timeout to abort the request
-    response = await fetch(`http://${hostname}:5000${endpoint}`, {
+    response = await fetch(url, {
       method,
       headers,
       body: body ? JSON.stringify(body) : null,
       signal,
     });
     clearTimeout(timeoutId); // Clear timeout if fetch succeeds
+
+    // Sliding session: check for refreshed token
+    const refreshedToken = response.headers.get('x-refreshed-token');
+    if (refreshedToken) {
+      console.log("Received refreshed token from server, updating storage ...");
+      await AsyncStorage.setItem("auth_token", refreshedToken);
+
+      // Call the provided updateAuth function
+      await updateAuth(refreshedToken);
+    }
   } catch (error) {
     if (error.name === "AbortError") {
       console.error("Fetch request timed out!");

@@ -21,10 +21,10 @@ export const AuthProvider = ({ children }) => {
                 console.log("Waiting for hostname to resolve...");
                 return false;
             }
-            const data = await apiFetch(hostname, "/login", "POST", { username, password });
+            const data = await apiFetch(`${hostname}/login`, "POST", { username, password });
             await AsyncStorage.setItem("auth_token", data.token);
             setToken(data.token);
-            const decoded = await apiFetch(hostname, "/tokenInfo", "GET", null, data.token);
+            const decoded = await apiFetch(`${hostname}/tokenInfo`, "GET", null, data.token);
             if (decoded) {
                 setTokenInfo(decoded);
             } else {
@@ -42,7 +42,8 @@ export const AuthProvider = ({ children }) => {
     const logout = async () => {
         const token = await AsyncStorage.getItem("auth_token");
         if (token) {
-            const data = await apiFetch(hostname, "/logout", "POST", null, token);
+            // Sending the token in the body to logout. If the token is expired, the server can still process the logout.
+            const data = await apiFetch(`${hostname}/logout`, "POST", { token });
         }
         await AsyncStorage.removeItem("auth_token");
         setToken(null);
@@ -60,9 +61,9 @@ export const AuthProvider = ({ children }) => {
                 return false;
             }
 
-            const data = await apiFetch(hostname, "/user", "GET", null, storedToken);
+            const data = await apiFetch(`${hostname}/user`, "GET", null, storedToken);
             setToken(storedToken);
-            const decoded = await apiFetch(hostname, "/tokenInfo", "GET", null, data.token);
+            const decoded = await apiFetch(`${hostname}/tokenInfo`, "GET", null, data.token);
             if (decoded) {
                 setTokenInfo(decoded);
             } else {
@@ -74,8 +75,31 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // Function to update both token and token info
+    const updateAuth = async (newToken) => {
+        setToken(newToken);
+        try {
+            const decoded = await apiFetch(
+                `${hostname}/tokenInfo`, 
+                "GET", 
+                null, 
+                newToken,
+                null,
+                null,
+                null,
+                30000,
+                null  // Pass null to prevent infinite recursion
+            );
+            if (decoded) {
+                setTokenInfo(decoded);
+            }
+        } catch (error) {
+            console.error("Error updating token info:", error);
+        }
+    };
+    
     return (
-        <AuthContext.Provider value={{ token, tokenInfo, login, logout }}>
+        <AuthContext.Provider value={{ token, tokenInfo, updateAuth, login, logout }}>
             {children}
         </AuthContext.Provider>
     );

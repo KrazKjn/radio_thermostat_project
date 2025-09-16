@@ -15,6 +15,7 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
         getCurrentTemperature,
         updateThermostatState,
         updateThermostatTime,
+        rebootThermostatServer,
     } = useThermostat();
     const thermostat = thermostats[thermostatIp];
     const [menuOpen, setMenuOpen] = useState(false);
@@ -47,6 +48,7 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
             getCurrentTemperature(thermostatIp, hostname, token);
             if (thermostat.autoRefresh) {
                 const interval = setInterval(() => {
+                    console.log(`[ThermostatControl] ${Date().toString()}: Timer triggered, refreshing temperature`);
                     getCurrentTemperature(thermostatIp, hostname, token);
                 }, thermostat.refreshInterval * 60 * 1000);
 
@@ -95,6 +97,7 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
                             hostname={hostname}
                             getCurrentTemperature={getCurrentTemperature}
                             updateThermostatTime={updateThermostatTime}
+                            rebootThermostatServer={rebootThermostatServer}
                             activeScreen={activeScreen}
                             setActiveScreen={setActiveScreen}
                             menuOpen={menuOpen}

@@ -6,7 +6,7 @@ import { HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO } from '.
 const ThermostatContext = createContext();
 
 export const ThermostatProvider = ({ children }) => {
-  const { token, logout, user } = useAuth(); // <-- Now available everywhere in this provider
+  const { token, logout, updateAuth, user } = useAuth(); // <-- Now available everywhere in this provider
   const [thermostats, setThermostats] = useState({}); // Store multiple thermostats
   const [scannerStatus, setScannerStatus] = useState({}); // Store scanner statuses
 
@@ -88,7 +88,8 @@ export const ThermostatProvider = ({ children }) => {
         tokenOverride ?? token,
         "Failed to update thermostat name",
         "Updating thermostat name...",
-        logout
+        logout,
+        updateAuth
       );
       if (data) {
         console.log("Thermostat name updated successfully:", data);
@@ -116,7 +117,8 @@ export const ThermostatProvider = ({ children }) => {
         tokenOverride ?? token,
         "Failed to reboot thermostat",
         "Rebooting thermostat...",
-        logout
+        logout,
+        updateAuth
       );
       if (data) {
         console.log("Thermostat rebooted successfully:", data);
@@ -142,7 +144,8 @@ export const ThermostatProvider = ({ children }) => {
         tokenOverride ?? token,
         "Failed to update target temperature",
         "Updating target temperature...",
-        logout
+        logout,
+        updateAuth
       );
       if (data) {
         console.log("Target temperature updated successfully:", data);
@@ -168,7 +171,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Failed to fetch thermostat data",
             "Fetching thermostat data...",
-            logout
+            logout,
+            updateAuth
         );
         if (data) {
             console.log("ThermostatContext: Fetched thermostat data:", data);
@@ -252,7 +256,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Failed to fetch model info",
             "Fetching model info...",
-            logout
+            logout,
+            updateAuth
         );
         if (data) {
             console.log("Fetched model info:", data);
@@ -285,7 +290,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Failed to fetch detailed model info",
             "Fetching detailed model info...",
-            logout
+            logout,
+            updateAuth
         );
         if (data) {
             console.log("Fetched detailed model info:", data);
@@ -326,7 +332,8 @@ export const ThermostatProvider = ({ children }) => {
                             tokenOverride ?? token,
                             "Error fetching thermostat model information",
                             "Fetching thermostat model information...",
-                            logout
+                            logout,
+                            updateAuth
                         );
 
                         if (data?.model) {
@@ -364,7 +371,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Failed to fetch thermostat name",
             "Fetching thermostat name...",
-            logout
+            logout,
+            updateAuth
         );
         if (data) {
             console.log("Fetched thermostat name:", data);
@@ -423,7 +431,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Failed to update thermostat time",
             "Updating thermostat time...",
-            logout
+            logout,
+            updateAuth
         );
 
         if (data) {
@@ -463,7 +472,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error updating thermostat mode",
             "Updating thermostat mode...".
-            logout
+            logout,
+            updateAuth
         );
 
         if (!data || (data && data.success !== 0)) {
@@ -507,7 +517,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error updating fan mode",
             "Updating fan mode...",
-            logout
+            logout,
+            updateAuth
         );
 
         if (!data || (data && data.success !== 0)) {
@@ -551,7 +562,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error updating hold mode",
             "Updating hold mode...",
-            logout
+            logout,
+            updateAuth
         );
 
         // Update the state with the response
@@ -593,7 +605,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error updating override mode",
             "Updating override mode...",
-            logout
+            logout,
+            updateAuth
         );
 
         // Update the state with the response
@@ -643,7 +656,8 @@ export const ThermostatProvider = ({ children }) => {
                 tokenOverride ?? token,
                 "Error fetching thermostat swing",
                 "Fetching thermostat swing...",
-                logout
+                logout,
+                updateAuth
             );
 
             const swingValue = data?.tswing !== undefined ? -data.tswing : 1.0; // Default to 1.0 if undefined
@@ -670,7 +684,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error updating thermostat swing",
             "Updating thermostat swing...",
-            logout
+            logout,
+            updateAuth
         );
 
         updateThermostatState(thermostatIp, {
@@ -693,7 +708,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error fetching cached data",
             "Fetching cached thermostat data...",
-            logout
+            logout,
+            updateAuth
         );
 
         if (cachedData && Array.isArray(cachedData)) {
@@ -719,7 +735,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Failed to start scanner",
             "Starting scanner...",
-            logout
+            logout,
+            updateAuth
         );
         console.log(`Scanner started for ${thermostatIp}:`, response);
     } catch (error) {
@@ -737,7 +754,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Failed to stop scanner",
             "Stopping scanner...",
-            logout
+            logout,
+            updateAuth
         );
         console.log(`Scanner stopped for ${thermostatIp}:`, response);
     } catch (error) {
@@ -755,7 +773,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Failed to restart scanner",
             "Restarting scanner...",
-            logout
+            logout,
+            updateAuth
         );
         console.log(`Scanner restarted for ${thermostatIp}:`, response);
     } catch (error) {
@@ -773,7 +792,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Failed to get scanner status",
             "Getting scanner status...",
-            logout
+            logout,
+            updateAuth
         );
         setScannerStatus(response.activeScanners || {});
         console.log("Scanner status:", response);
@@ -793,7 +813,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Failed to fetch scanned data",
             "Fetching scanned data...",
-            logout
+            logout,
+            updateAuth
         );
         console.log(`Scanned data for ${thermostatIp}:`, response);
         return response.filter(item => item.temp != null);
@@ -822,7 +843,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error fetching thermostat program schedule",
             "Fetching cached thermostat program schedule...",
-            logout
+            logout,
+            updateAuth
         );
         return response;
     } catch (error) {
@@ -840,7 +862,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error fetching thermostat program schedule",
             "Fetching cached thermostat program schedule...",
-            logout
+            logout,
+            updateAuth
         );
         console.log("Schedule updated successfully:", response);
         return response;
@@ -861,7 +884,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error fetching thermostat cloud settings",
             "Fetching thermostat cloud settings...",
-            logout
+            logout,
+            updateAuth
         );
         return response;
     } catch (error) {
@@ -879,7 +903,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error updating thermostat cloud settings",
             "Updating thermostat cloud settings...",
-            logout
+            logout,
+            updateAuth
         );
         console.log("Cloud settings updated successfully:", response);
         return response;
@@ -899,7 +924,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error fetching thermostats",
             "Fetching thermostats...",
-            logout
+            logout,
+            updateAuth
         );
         console.log("Fetched thermostats:", response);
         return response;
@@ -918,7 +944,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error adding thermostat",
             "Adding thermostat...",
-            logout
+            logout,
+            updateAuth
         );
         console.log("Thermostat added successfully:", response);
         return response;
@@ -936,7 +963,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error updating thermostat",
             "Updating thermostat...",
-            logout
+            logout,
+            updateAuth
         );
         console.log("Thermostat updated successfully:", response);
         return response;
@@ -954,7 +982,8 @@ export const ThermostatProvider = ({ children }) => {
             tokenOverride ?? token,
             "Error disabling thermostat",
             "Disabling thermostat...",
-            logout
+            logout,
+            updateAuth
         );
         console.log("Thermostat disabled successfully:", response);
         return response;
@@ -975,6 +1004,7 @@ export const ThermostatProvider = ({ children }) => {
             "Error fetching thermostat scan results",
             "Fetching thermostat scan results...",
             logout,
+            updateAuth,
             120000
         );
         return response;

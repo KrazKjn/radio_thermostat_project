@@ -78,7 +78,8 @@ CREATE TABLE tstate_cycles (
     start_timestamp INTEGER,
     stop_timestamp INTEGER,
     start_time TEXT,
-    stop_time TEXT
+    stop_time TEXT,
+    run_time REAL
 )
 
 -- Fan State Cycles
@@ -89,7 +90,8 @@ CREATE TABLE fstate_cycles (
     start_timestamp INTEGER,
     stop_timestamp INTEGER,
     start_time TEXT,
-    stop_time TEXT
+    stop_time TEXT,
+    run_time REAL
 )
 
 CREATE TRIGGER track_hvac_changes
@@ -169,3 +171,71 @@ SELECT
 FROM readings_with_next
 WHERE next_ts IS NOT NULL
 GROUP BY day, ip;
+
+DROP TRIGGER IF EXISTS log_tstate_cycle;
+CREATE TRIGGER log_tstate_cycle
+AFTER INSERT ON scan_data
+FOR EACH ROW
+BEGIN
+    -- Case 1: INSERT new cycle if tstate = 1 and no open cycle exists
+    INSERT INTO tstate_cycles (
+        thermostat_id,
+        tmode,
+        start_timestamp,
+        start_time
+    )
+    SELECT
+        NEW.thermostat_id,
+        NEW.tmode,
+        NEW.timestamp,
+        datetime(NEW.timestamp / 1000, 'unixepoch')
+    WHERE NEW.tstate != 0
+      AND NOT EXISTS (
+          SELECT 1 FROM tstate_cycles
+          WHERE thermostat_id = NEW.thermostat_id
+            AND stop_timestamp IS NULL
+      );
+
+    -- Case 2: UPDATE last open cycle if tstate = 0
+    UPDATE tstate_cycles
+    SET stop_timestamp = NEW.timestamp,
+        stop_time = datetime(NEW.timestamp / 1000, 'unixepoch'),
+        run_time = ROUND((NEW.timestamp - start_timestamp) / 60000.0, 2)
+    WHERE thermostat_id = NEW.thermostat_id
+      AND stop_timestamp IS NULL
+      AND NEW.tstate = 0;
+END;
+
+DROP TRIGGER IF EXISTS log_fstate_cycle;
+CREATE TRIGGER log_fstate_cycle
+AFTER INSERT ON scan_data
+FOR EACH ROW
+BEGIN
+    -- Case 1: INSERT new cycle if fstate = 1 and no open cycle exists
+    INSERT INTO fstate_cycles (
+        thermostat_id,
+        tmode,
+        start_timestamp
+        start_time
+    )
+    SELECT
+        NEW.thermostat_id,
+        NEW.tmode,
+        NEW.timestamp,
+        datetime(NEW.timestamp / 1000, 'unixepoch')
+    WHERE NEW.fstate = 1
+      AND NOT EXISTS (
+          SELECT 1 FROM fstate_cycles
+          WHERE thermostat_id = NEW.thermostat_id
+            AND stop_timestamp IS NULL
+      );
+
+    -- Case 2: UPDATE last open cycle if fstate = 0
+    UPDATE fstate_cycles
+    SET stop_timestamp = NEW.timestamp,
+        stop_time = datetime(NEW.timestamp / 1000, 'unixepoch'),
+        run_time = ROUND((NEW.timestamp - start_timestamp) / 60000.0, 2)
+    WHERE thermostat_id = NEW.thermostat_id
+      AND stop_timestamp IS NULL
+      AND NEW.fstate = 0;
+END;

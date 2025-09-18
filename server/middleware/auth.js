@@ -50,6 +50,7 @@ const refreshTokenMiddleware = (req, res, next) => {
             // Generate a new token with fresh expiration
             const payload = { username: req.user.username, role: req.user.role };
             const newToken = jwt.sign(payload, SECRET_KEY, { expiresIn: "1h" });
+            res.setHeader("Access-Control-Expose-Headers", "x-refreshed-token");
             res.setHeader("x-refreshed-token", newToken);
 
             // Decode the token without verifying signature
@@ -57,7 +58,7 @@ const refreshTokenMiddleware = (req, res, next) => {
 
             if (decoded && decoded.exp) {
                 const expDate = new Date(decoded.exp * 1000); // Convert from seconds to milliseconds
-                console.log(`Token expires at: ${expDate.toLocaleString()}`);
+                console.log(`Header updated with x-refreshed-token expiring: ${expDate.toLocaleString()}`);
             } else {
                 console.log("Token does not contain an expiration (exp) claim.");
             }

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const apiFetch = async (url, method = "GET", body = null, token = null, errorMessage = null, logMessage = null, logoutFn = null, timeout = 30000) => {
+const apiFetch = async (url, method = "GET", body = null, token = null, errorMessage = null, logMessage = null, logoutFn = null, updateAuthFn = null, timeout = 30000) => {
   const headers = {
     "Content-Type": "application/json",
   };
@@ -29,12 +29,12 @@ const apiFetch = async (url, method = "GET", body = null, token = null, errorMes
 
     // Sliding session: check for refreshed token
     const refreshedToken = response.headers.get('x-refreshed-token');
-    if (refreshedToken) {
+    if (refreshedToken && updateAuthFn) {
       console.log("Received refreshed token from server, updating storage ...");
       await AsyncStorage.setItem("auth_token", refreshedToken);
 
-      // Call the provided updateAuth function
-      await updateAuth(refreshedToken);
+      // Call the provided  function
+      await updateAuthFn(refreshedToken);
     }
   } catch (error) {
     if (error.name === "AbortError") {

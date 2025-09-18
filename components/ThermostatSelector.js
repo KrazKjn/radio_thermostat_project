@@ -8,7 +8,7 @@ import ThermostatControl from "./ThermostatControl";
 import commonStyles from "../styles/commonStyles";
 
 const ThermostatSelector = () => {
-  const { token, logout } = useAuth();
+  const { token, logout, updateAuth } = useAuth();
   const hostname = useContext(HostnameContext);
   const data = { temp: "🔍", tmode: 0, fmode: 0, override: 0, hold: 0, t_cool: "🔍", t_heat: "🔍", tstate: 0, fstate: 0, time: { day: 0, hour: 0, minute: 0 } };
   const [subnet, setSubnet] = useState("");

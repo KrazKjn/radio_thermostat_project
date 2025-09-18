@@ -7,7 +7,7 @@ import { useThermostat } from "../context/ThermostatContext";
 import commonStyles from "../styles/commonStyles";
 
 const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
-    const { token, logout } = useAuth();
+    const { token, logout, updateAuth } = useAuth();
     const hostname = useContext(HostnameContext);
     const {
         thermostats,

@@ -82,7 +82,7 @@ export const AuthProvider = ({ children }) => {
             const decoded = await apiFetch(
                 `${hostname}/tokenInfo`, 
                 "GET", 
-                null, 
+                { oldToken: token }, 
                 newToken,
                 null,
                 null,

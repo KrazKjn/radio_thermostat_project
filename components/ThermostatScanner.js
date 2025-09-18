@@ -8,7 +8,7 @@ import apiFetch from "../utils/apiFetch"; // Assuming you have a utility functio
 import commonStyles from "../styles/commonStyles";
 
 const ThermostatScanner = () => {
-  const { token, logout } = useAuth();
+  const { token, logout, updateAuth } = useAuth();
   const hostname = useContext(HostnameContext);
   const [devices, setDevices] = useState([]);
   const [subnet, setSubnet] = useState("");
@@ -84,7 +84,7 @@ const ThermostatScanner = () => {
     for (let i = 20; i <= 30; i++) {
       const ip = `${subnet}.${i}`;
       try {
-        const data = await apiFetch(`${hostname}/thermostat/${ip}`, "GET", null, token, "Error fetching thermostat data", "Fetching cached thermostat data...", logout, 3000);
+        const data = await apiFetch(`${hostname}/thermostat/${ip}`, "GET", null, token, "Error fetching thermostat data", "Fetching cached thermostat data...", logout, updateAuth, 3000);
         if (data && data.model) {
             foundDevices.push({ ip, model: data.model, name: data.name });
         }

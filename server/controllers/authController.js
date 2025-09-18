@@ -40,6 +40,10 @@ const login = async (req, res) => {
     // Persist session in user_sessions table
     const now = Math.floor(Date.now() / 1000);
     const expiresAt = now + expiresInSec;
+    const result = db.prepare('DELETE FROM user_sessions WHERE expiresAt < ?').run(now);
+    if (result.changes > 0) {
+      console.log(`Purged expired sessions`);
+    }
     db.prepare(`
       INSERT INTO user_sessions (userId, sessionToken, createdAt, expiresAt)
       VALUES (?, ?, ?, ?)
@@ -74,8 +78,17 @@ const tokenInfo = (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.split(" ")[1];
+      const oldToken = req.body?.oldToken;
       const decoded = jwt.decode(token);
       if (decoded) {
+        if (oldToken && oldToken !== token) {
+          // Invalidate the old token in the database
+          db.prepare(`
+              UPDATE user_sessions
+              SET sessionToken = ?, createdAt = ?, expiresAt = ?
+              WHERE sessionToken = ?
+            `).run(token, now, decoded.exp, oldToken);
+        }
         res.json({
           username: decoded.username,
           role: decoded.role,

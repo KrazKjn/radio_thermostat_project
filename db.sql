@@ -35,13 +35,15 @@ CREATE INDEX idx_users_username ON users(username);
 -- HVAC Scan Data
 CREATE TABLE scan_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    thermostat_id INTEGER NOT NULL,   -- Reference thermostats table
+    thermostat_id INTEGER NOT NULL,    -- Reference thermostats table
     timestamp INTEGER NOT NULL,        -- Unix timestamp (milliseconds)
-    temp REAL,                        -- Current temperature
+    temp REAL,                         -- Current temperature
     tmode INTEGER,
-    tTemp REAL,                       -- Target temperature
+    tTemp REAL,                        -- Target temperature
     tstate INTEGER,                    -- HVAC state
     fstate INTEGER,                    -- Fan state
+    outdoor_temp REAL,                 -- Outdoor temperature
+    cloud_cover REAL,                  -- Percentage Cloud Cover
     FOREIGN KEY (thermostat_id) REFERENCES thermostats(id)
 );
 
@@ -68,6 +70,27 @@ CREATE TABLE hvac_events (
     FOREIGN KEY (thermostat_id) REFERENCES thermostats(id)
 );
 
+-- Thermostat State Cycles
+CREATE TABLE tstate_cycles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thermostat_id INTEGER NOT NULL,
+    tmode INTEGER,
+    start_timestamp INTEGER,
+    stop_timestamp INTEGER,
+    start_time TEXT,
+    stop_time TEXT
+)
+
+-- Fan State Cycles
+CREATE TABLE fstate_cycles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thermostat_id INTEGER NOT NULL,
+    tmode INTEGER,
+    start_timestamp INTEGER,
+    stop_timestamp INTEGER,
+    start_time TEXT,
+    stop_time TEXT
+)
 
 CREATE TRIGGER track_hvac_changes
 AFTER INSERT ON scan_data
@@ -106,3 +129,43 @@ SELECT h.event_time, t.uuid, t.ip, t.location,
        h.prev_fstate, h.new_fstate
 FROM hvac_events h
 JOIN thermostats t ON h.thermostat_id = t.id;
+
+CREATE VIEW thermostat_daily_runtime AS
+WITH readings_with_next AS (
+  SELECT
+    *,
+    date(timestamp / 1000, 'unixepoch') AS day,
+    LEAD(timestamp) OVER (PARTITION BY ip ORDER BY timestamp) AS next_ts
+  FROM thermostat_readings
+)
+SELECT
+  day,
+  ip,
+  ROUND(SUM(
+    CASE WHEN fstate != 0 THEN (next_ts - timestamp) / 1000.0 ELSE 0 END
+  ) / 60.0, 2) AS fan_minutes,
+  ROUND(SUM(
+    CASE WHEN tstate != 0 THEN (next_ts - timestamp) / 1000.0 ELSE 0 END
+  ) / 60.0, 2) AS compressor_minutes
+FROM readings_with_next
+WHERE next_ts IS NOT NULL
+GROUP BY day, ip;
+
+CREATE VIEW thermostat_runtime_vs_target AS
+WITH readings_with_next AS (
+  SELECT
+    *,
+    date(timestamp / 1000, 'unixepoch') AS day,
+    LEAD(timestamp) OVER (PARTITION BY ip ORDER BY timestamp) AS next_ts
+  FROM thermostat_readings
+)
+SELECT
+  day,
+  ip,
+  ROUND(AVG(ttemp), 1) AS avg_target_temp,
+  ROUND(SUM(
+    CASE WHEN tstate != 0 THEN (next_ts - timestamp) / 1000.0 ELSE 0 END
+  ) / 60.0, 2) AS compressor_minutes
+FROM readings_with_next
+WHERE next_ts IS NOT NULL
+GROUP BY day, ip;

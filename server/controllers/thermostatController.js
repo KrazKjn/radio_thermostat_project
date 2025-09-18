@@ -1,6 +1,7 @@
 const fetch = require("node-fetch");
 const db = require('../../db');
 const { getThermostatScanMode, updateThermostatScanMode2, updateThermostatEnabled, scannerIntervalTask, scanSubnet, addDeviceByUUID } = require('../services/thermostatService');
+const weatherService = require('../services/weatherService');
 const { convertToTwoDecimalFloat, formatTimestamp } = require('../utils/utils');
 const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
 const { HVAC_SCAN_CLOUD } = require('../../constants/hvac_scan');
@@ -736,7 +737,70 @@ const scanThermostats = async (req, res) => {
     res.json(results);
 };
 
-const captureStatIn = (req, res) => {
+const updateWeatherData = async () => {
+    try {
+        const weatherData = await weatherService.getWeatherData(process.env.WEATHER_LATITUDE, process.env.WEATHER_LONGITUDE);
+
+        // Navigate to minutely intervals
+        const intervals = weatherData.timelines?.minutely || [];
+
+        if (intervals.length === 0) {
+            console.log("No minutely data found.", weatherData);
+            return;
+        }
+
+        const entry = intervals[0]; // Only process the first item as that is the current value
+                                    // other values are future predictions
+        if (entry) {
+            const time = new Date(entry.time).toLocaleString();
+            const temperature = entry.values?.temperature ?? 'N/A';
+            const cloudCover = entry.values?.cloudCover ?? 'N/A';
+
+            if (temperature !== undefined && cloudCover !== undefined) {
+                const ts = new Date(entry.time);
+                const minuteKey = ts.toISOString().slice(0, 16); // e.g., "2025-09-17T15:42"
+
+                // Update the matching time if found
+                const stmt = db.prepare(`
+                    UPDATE scan_data
+                    SET outdoor_temp = ?, cloud_cover = ?
+                    WHERE (outdoor_temp IS NULL OR
+                        cloud_cover IS NULL) AND
+                        strftime('%Y-%m-%dT%H:%M', timestamp / 1000, 'unixepoch') = ?
+                `);
+                try {
+                    const result = stmt.run(
+                        temperature,
+                        cloudCover,
+                        minuteKey,
+                    );
+                    if (result.changes === 1) {
+                        console.log(`Current Weather data saved: ${minuteKey} => temp: ${temperature}, cloud cover: ${cloudCover}`);
+                    } else {
+                        // Update the latest entry with the lastest values
+                        const fallbackStmt = db.prepare(`
+                            UPDATE scan_data
+                            SET outdoor_temp = ?, cloud_cover = ?
+                            WHERE (outdoor_temp IS NULL OR cloud_cover IS NULL)
+                            ORDER BY timestamp DESC
+                            LIMIT 1
+                        `);
+                        fallbackStmt.run(temperature, cloudCover);
+                        console.log(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}`);
+                    }
+                }
+                catch (error) {
+                    console.error(`Thermostat update failed for ${minuteKey}:`, error.message);
+                }
+            }
+        }
+    }
+    catch (error) {
+        console.log("Failed to update weather data.", error);
+    }
+}
+
+const captureStatIn = async (req, res) => {
     const ip = (req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress).replace(/^::ffff:/, '');
     const currentTime = Date.now();
     const bodyB = req.body;
@@ -882,6 +946,8 @@ const captureStatIn = (req, res) => {
             } catch (error) {
                 console.log(`Error saving Thermostat data for: ${location}. Error: ${error}`);
             }
+            // Update weather data
+            await updateWeatherData();
         }
     }
 

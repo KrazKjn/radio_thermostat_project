@@ -4,6 +4,7 @@ const { authenticateToken, refreshTokenMiddleware } = require('../middleware/aut
 const thermostatController = require('../controllers/thermostatController');
 const userController = require('../controllers/userController');
 const authController = require('../controllers/authController');
+const weatherController = require('../controllers/weatherController');
 
 // Helper to apply both middlewares
 const authWithRefresh = [authenticateToken, refreshTokenMiddleware];
@@ -60,5 +61,8 @@ router.get("/thermostatscan/:subnet", authWithRefresh, thermostatController.scan
 // Cloud data
 // router.post('/captureStatIn', authWithRefresh, thermostatController.captureStatIn);
 router.post('/captureStatIn', thermostatController.captureStatIn);
+
+// Weather
+router.get('/weather', authWithRefresh, weatherController.getWeather);
 
 module.exports = router;

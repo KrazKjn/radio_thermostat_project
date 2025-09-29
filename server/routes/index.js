@@ -12,7 +12,7 @@ const authWithRefresh = [authenticateToken, refreshTokenMiddleware];
 // Auth
 router.post('/login', authController.login);
 router.post('/logout', authController.logout);
-router.get('/tokenInfo', authWithRefresh, authController.tokenInfo);
+router.get('/tokenInfo', authController.tokenInfo);
 
 // User
 router.get('/user', authWithRefresh, userController.getUser);

@@ -250,6 +250,11 @@ const commonStyles = StyleSheet.create({
       justifyContent: "center",
       marginVertical: 4,
   },
+  digitalTempBlock: {
+    flexDirection: "column",
+    alignItems: "center",
+    marginHorizontal: 8,
+  },
   digitalLabel: {
       color: "#aaa",
       fontSize: 16,
@@ -258,6 +263,13 @@ const commonStyles = StyleSheet.create({
   },
   digitalTemp: {
       color: "#0ff",
+      fontSize: 56,
+      fontFamily: "monospace",
+      fontWeight: "bold",
+      marginRight: 8,
+  },
+  digitalTempSeparator: {
+      color: "#f55",
       fontSize: 56,
       fontFamily: "monospace",
       fontWeight: "bold",

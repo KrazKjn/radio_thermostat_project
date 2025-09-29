@@ -16,6 +16,8 @@ import UserManagement from "./UserManagement";
 import { UserContext } from '../context/UserContext';
 import DataRefreshContext from "../context/DataRefreshContext";
 
+const Logger = require('./Logger');
+
 const ThermostatDisplay = ({
     thermostat,
     thermostatIp,
@@ -42,7 +44,7 @@ const ThermostatDisplay = ({
             getCurrentTemperature(thermostatIp, hostname, token);
             // Subscribe to refresh
             const unsubscribe = register(() => {
-                console.log("[ThermostatDisplay] Timer triggered, refreshing temperature");
+                Logger.info("[Timer triggered, refreshing temperature", 'ThermostatDisplay', 'useEffect');
                 getCurrentTemperature(thermostatIp, hostname, token);
             });
             return () => unsubscribe();
@@ -73,15 +75,16 @@ const ThermostatDisplay = ({
         try {
             const confirmed = window.confirm("Are you sure you want to reboot the thermostat?");
             if (!confirmed) {
-                console.log("Reboot canceled by user.");
+                Logger.info("Reboot canceled by user.", 'ThermostatDisplay', 'rebootThermostat');
                 return;
             }
 
-            console.log("Rebooting thermostat...");
+            Logger.info("Rebooting thermostat...", 'ThermostatDisplay', 'rebootThermostat');
             await rebootThermostatServer(thermostatIp, hostname, token);
-            console.log("Thermostat rebooted successfully");
+            Logger.info("Thermostat rebooted successfully", 'ThermostatDisplay', 'rebootThermostat');
         } catch (error) {
             console.error("Error rebooting thermostat:", error);
+            Logger.error(`Error rebooting thermostat: ${error.message}`, 'ThermostatDisplay', 'rebootThermostat');
         }
     };
 
@@ -121,11 +124,27 @@ const ThermostatDisplay = ({
 
                     {/* Room Temperature */}
                     <View style={commonStyles.digitalTempRow}>
-                        <Text style={commonStyles.digitalLabel}>Room</Text>
-                        <Text style={commonStyles.digitalTemp}>
-                            {thermostat.currentTemp}
-                            <Text style={commonStyles.digitalUnit}>°F</Text>
-                        </Text>
+                        <View style={commonStyles.digitalTempBlock}>
+                            <Text style={commonStyles.digitalLabel}>Room</Text>
+                            <Text style={commonStyles.digitalTemp}>
+                                {thermostat.currentTemp}
+                                <Text style={commonStyles.digitalUnit}>°F</Text>
+                            </Text>
+                        </View>
+                        {thermostat.outdoor_temp && (
+                            <Text style={commonStyles.digitalTempSeparator}>
+                                /
+                            </Text>
+                        )}
+                        {thermostat.outdoor_temp && (
+                            <View style={commonStyles.digitalTempBlock}>
+                                <Text style={commonStyles.digitalLabel}>Outdoor</Text>
+                                <Text style={commonStyles.digitalTemp}>
+                                    {thermostat.outdoor_temp}
+                                    <Text style={commonStyles.digitalUnit}>°F</Text>
+                                </Text>
+                            </View>
+                        )}
                     </View>
 
                     {/* Target Temperature Control */}

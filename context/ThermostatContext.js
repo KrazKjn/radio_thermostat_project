@@ -1,12 +1,15 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext"; // Import the hook
+import { useWeather } from "../context/WeatherContext"; // Import the hook
 import apiFetch from "../utils/apiFetch"; // Utility function for API calls
 import { HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO } from '../constants/hvac_mode'; // Import HVAC modes
- 
+
+const Logger = require('../components/Logger');
 const ThermostatContext = createContext();
 
 export const ThermostatProvider = ({ children }) => {
   const { token, logout, updateAuth, user } = useAuth(); // <-- Now available everywhere in this provider
+  const { weatherData, setWeatherData, fetchWeather } = useWeather(); // <-- Now available everywhere in this provider
   const [thermostats, setThermostats] = useState({}); // Store multiple thermostats
   const [scannerStatus, setScannerStatus] = useState({}); // Store scanner statuses
 
@@ -66,9 +69,9 @@ export const ThermostatProvider = ({ children }) => {
             }
             return diff;
         }, {});
-        console.log("Differences:", differences);
-        console.log("Updating thermostat state for IP:", thermostatIp, "with updates:", updates);
-        
+        Logger.debug(`Differences: ${JSON.stringify(differences, null, 2)}`, 'ThermostatContext', 'updateThermostatState');
+        Logger.debug(`Updating thermostat state for IP: ${thermostatIp} with updates: ${JSON.stringify(updates, null, 2)}`, 'ThermostatContext', 'updateThermostatState');
+
         return {
             ...prevState,
             [thermostatIp]: {
@@ -92,7 +95,7 @@ export const ThermostatProvider = ({ children }) => {
         updateAuth
       );
       if (data) {
-        console.log("Thermostat name updated successfully:", data);
+        Logger.info(`Thermostat name updated successfully: ${JSON.stringify(data, null, 2)}`, 'ThermostatContext', 'updateThermostatName');
         updateThermostatState(thermostatIp, {
             thermostatName: name,
             thermostatInfo: {
@@ -103,13 +106,14 @@ export const ThermostatProvider = ({ children }) => {
       }
     } catch (error) {
       console.error("Error updating thermostat name:", error);
+      Logger.error(`Error updating thermostat name: ${error.message}`, 'ThermostatContext', 'updateThermostatName');
       throw new Error("Failed to update thermostat name.");
     }
   };
 
   const rebootThermostatServer = async (thermostatIp, hostname, tokenOverride) => {
     try {
-      console.log("Rebooting thermostat...");
+      Logger.info("Rebooting thermostat...", 'ThermostatContext', 'rebootThermostatServer');
       const data = await apiFetch(
         `${hostname}/thermostat/reboot/${thermostatIp}`,
         "POST",
@@ -121,7 +125,7 @@ export const ThermostatProvider = ({ children }) => {
         updateAuth
       );
       if (data) {
-        console.log("Thermostat rebooted successfully:", data);
+        Logger.info(`Thermostat rebooted successfully: ${JSON.stringify(data, null, 2)}`, 'ThermostatContext', 'rebootThermostatServer');
         updateThermostatState(thermostatIp, {
             thermostatInfo: {
                 ...thermostats[thermostatIp].thermostatInfo,
@@ -131,6 +135,7 @@ export const ThermostatProvider = ({ children }) => {
       }
     } catch (error) {
       console.error("Error rebooting thermostat:", error);
+      Logger.error(`Error rebooting thermostat: ${error.message}`, 'ThermostatContext', 'rebootThermostatServer');
       throw new Error("Failed to reboot thermostat.");
     }
   };
@@ -148,18 +153,19 @@ export const ThermostatProvider = ({ children }) => {
         updateAuth
       );
       if (data) {
-        console.log("Target temperature updated successfully:", data);
+        Logger.info(`Target temperature updated successfully: ${JSON.stringify(data, null, 2)}`, 'ThermostatContext', 'updateThermostatTargetTemperature');
         updateThermostatState(thermostatIp, { targetTemp });
       }
     } catch (error) {
       console.error("Error updating target temperature:", error);
+      Logger.error(`Error updating target temperature: ${error.message}`, 'ThermostatContext', 'updateThermostatTargetTemperature');
       throw new Error("Failed to update target temperature.");
     }
   };
 
   const fetchThermostatData = async (thermostatIp, hostname, tokenOverride) => {
     if (!hostname || !thermostatIp || thermostatIp === "Loading ...") {
-        console.warn("Hostname or thermostat IP not available yet!");
+        Logger.warn("Hostname or thermostat IP not available yet!", 'ThermostatContext', 'fetchThermostatData');
         return null;
     }
 
@@ -175,14 +181,22 @@ export const ThermostatProvider = ({ children }) => {
             updateAuth
         );
         if (data) {
-            console.log("ThermostatContext: Fetched thermostat data:", data);
+            Logger.debug(`ThermostatContext: Fetched thermostat data: ${JSON.stringify(data, null, 2)}`, 'ThermostatContext', 'fetchThermostatData');
             let modelInfo = null;
+            let weatherData2 = null;
             try {
                 // Fetch additional data (model info and name)
                 modelInfo = await fetchModelInfo(thermostatIp, hostname, tokenOverride ?? token);
             } catch (error) {
                 console.error("Error fetching model info:", error);
+                Logger.error(`Error fetching model info: ${error.message}`, 'ThermostatContext', 'fetchThermostatData');
                 // modelInfo stays null
+            }
+            try {
+                weatherData2 = await fetchWeather(29.8238, -90.4751);
+            } catch (error) {
+                console.error("Error fetching weather data:", error);
+                Logger.error(`Error fetching weather data: ${error.message}`, 'ThermostatContext', 'fetchThermostatData');
             }
 
             // Update the context with the fetched data
@@ -210,13 +224,25 @@ export const ThermostatProvider = ({ children }) => {
                 };
                 updateObj.thermostatName = modelInfo.name;
             }
+            if (weatherData2) {
+                const intervals = weatherData2.timelines?.minutely || [];
 
+                if (intervals.length > 0) {
+                    const entry = intervals[0]; // Only process the first item as that is the current value
+                                                // other values are future predictions
+                    if (entry) {
+                        updateObj.outdoor_temp = entry.values?.temperature ?? 'N/A';
+                        updateObj.cloud_cover = entry.values?.cloudCover ?? 'N/A';
+                    }
+                }
+            }
             updateThermostatState(thermostatIp, updateObj);
 
             return data;
         }
     } catch (error) {
         console.error("Error fetching thermostat data:", error);
+        Logger.error(`Error fetching thermostat data: ${error.message}`, 'ThermostatContext', 'fetchThermostatData');
         throw new Error("Failed to fetch thermostat data.");
     }
   };
@@ -231,10 +257,10 @@ export const ThermostatProvider = ({ children }) => {
             currentThermostat?.lastUpdated &&
             Date.now() - currentThermostat.lastUpdated < 1000 * 60
         ) {
-            console.log("Using cached thermostat data.");
+            Logger.info("Using cached thermostat data.", 'ThermostatContext', 'getCurrentTemperature');
             return currentThermostat;
         } else if (!useCache) {
-            console.log("Cached data is stale or not used, fetching new data.");
+            Logger.info("Cached data is stale or not used, fetching new data.", 'ThermostatContext', 'getCurrentTemperature');
         }
 
         // Fetch new data
@@ -243,6 +269,7 @@ export const ThermostatProvider = ({ children }) => {
         return data;
     } catch (error) {
         console.error("Error getting current temperature:", error);
+        Logger.error(`Error getting current temperature: ${error.message}`, 'ThermostatContext', 'getCurrentTemperature');
         throw new Error("Failed to get current temperature.");
     }
   };
@@ -260,7 +287,7 @@ export const ThermostatProvider = ({ children }) => {
             updateAuth
         );
         if (data) {
-            console.log("Fetched model info:", data);
+            Logger.debug(`Fetched model info: ${JSON.stringify(data, null, 2)}`, 'ThermostatContext', 'fetchModelInfo');
 
             // Update the context with the fetched model info
             updateThermostatState(thermostatIp, {
@@ -277,6 +304,7 @@ export const ThermostatProvider = ({ children }) => {
         }
     } catch (error) {
         console.error("Error fetching model info:", error);
+        Logger.error(`Error fetching model info: ${error.message}`, 'ThermostatContext', 'fetchModelInfo');
         throw new Error("Failed to fetch model info.");
     }
   };
@@ -294,7 +322,7 @@ export const ThermostatProvider = ({ children }) => {
             updateAuth
         );
         if (data) {
-            console.log("Fetched detailed model info:", data);
+            Logger.debug(`Fetched detailed model info: ${JSON.stringify(data, null, 2)}`, 'ThermostatContext', 'fetchModelInfoDetailed');
 
             // Update the context with the fetched model info
             updateThermostatState(thermostatIp, {
@@ -311,6 +339,7 @@ export const ThermostatProvider = ({ children }) => {
         }
     } catch (error) {
         console.error("Error fetching detailed model info:", error);
+        Logger.error(`Error fetching detailed model info: ${error.message}`, 'ThermostatContext', 'fetchModelInfoDetailed');
         throw new Error("Failed to fetch detailed model info.");
     }
   };
@@ -423,7 +452,7 @@ export const ThermostatProvider = ({ children }) => {
             },
         };
 
-        console.log(JSON.stringify(bodyData)); // Check the output
+        console.log(JSON.stringify(bodyData, null, 2)); // Check the output
         const data = await apiFetch(
             `${hostname}/tstat/${thermostatIp}`,
             "POST",

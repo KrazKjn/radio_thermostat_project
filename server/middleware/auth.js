@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const Logger = require('../../components/Logger');
 const SECRET_KEY = process.env.SECRET_KEY || "your_secret_key"; // Use a strong key in production
 const RENEW_WITHIN_MINUTES = 15;
 
@@ -6,11 +7,18 @@ const authenticateToken = (req, res, next) => {
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1]; // Extract token from "Bearer <token>"
 
-    if (!token) console.log("Unauthorized (401): No token provided");
+    if (!token) Logger.warn("Unauthorized (401): No token provided", 'auth', 'authenticateToken');
     if (!token) return res.status(401).json({ error: "Unauthorized: No token provided" });
 
     jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) console.log("Forbidden (403): Forbidden: Invalid token");
+        if (err) {
+            Logger.error("Forbidden (403): Forbidden: Invalid token", 'auth', 'authenticateToken');
+            Logger.error(`Error: ${err.message}`, 'auth', 'authenticateToken');
+            const decoded = jwt.decode(token);
+            Logger.error(`Token: ${Logger.formatJSON(decoded)}`, 'auth', 'authenticateToken');
+            Logger.error(`Issued: ${new Date(decoded.iat * 1000).toLocaleString()}`, 'auth', 'authenticateToken');
+            Logger.error(`Expires: ${new Date(decoded.exp * 1000).toLocaleString()}`, 'auth', 'authenticateToken');
+        }
         if (err) return res.status(403).json({ error: "Forbidden: Invalid token" });
 
         req.user = user;
@@ -35,15 +43,15 @@ const refreshTokenMiddleware = (req, res, next) => {
                 const expiresInMs = expDate.getTime() - now;
 
                 if (expiresInMs <= RENEW_WITHIN_MINUTES * 60 * 1000) {
-                    console.log("Token will expire in 15 minutes or less.");
+                    Logger.warn("Token will expire in 15 minutes or less.", 'auth', 'refreshTokenMiddleware');
                     renewToken = true;
                 }
-                console.log(`Current token expires at: ${expDate.toLocaleString()}`);
+                Logger.debug(`Current token expires at: ${expDate.toLocaleString()}`, 'auth', 'refreshTokenMiddleware');
             } else {
-                console.log("Current token does not contain an expiration (exp) claim.");
+                Logger.warn("Current token does not contain an expiration (exp) claim.", 'auth', 'refreshTokenMiddleware');
             }
         } else {
-            console.log("No current token found in Authorization header.");
+            Logger.warn("No current token found in Authorization header.", 'auth', 'refreshTokenMiddleware');
         }
 
         if (renewToken) {
@@ -58,10 +66,11 @@ const refreshTokenMiddleware = (req, res, next) => {
 
             if (decoded && decoded.exp) {
                 const expDate = new Date(decoded.exp * 1000); // Convert from seconds to milliseconds
-                console.log(`Header updated with x-refreshed-token expiring: ${expDate.toLocaleString()}`);
+                Logger.debug(`Header updated with x-refreshed-token expiring: ${expDate.toLocaleString()}`, 'auth', 'refreshTokenMiddleware');
             } else {
-                console.log("Token does not contain an expiration (exp) claim.");
+                Logger.warn("Token does not contain an expiration (exp) claim.", 'auth', 'refreshTokenMiddleware');
             }
+            renewToken = false;
         }
     }
     next();

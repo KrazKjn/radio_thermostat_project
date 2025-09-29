@@ -49,10 +49,11 @@ CREATE TABLE scan_data (
 
 CREATE INDEX idx_scan_data_thermostat ON scan_data(thermostat_id, timestamp);
 
+DROP VIEW IF EXISTS thermostat_readings;
 CREATE VIEW thermostat_readings AS
-SELECT sd.timestamp, t.uuid, t.ip, t.location, sd.temp, sd.tmode, sd.tTemp, sd.tstate, sd.fstate
+SELECT sd.timestamp, t.uuid, t.ip, t.location, sd.temp, sd.tmode, sd.tTemp, sd.tstate, sd.fstate, sd.outdoor_temp, sd.cloud_cover
 FROM scan_data sd
-JOIN thermostats t ON sd.thermostat_id = t.id;
+JOIN thermostats t ON sd.thermostat_id = t.id
 
 -- HVAC Events
 CREATE TABLE hvac_events (
@@ -239,3 +240,26 @@ BEGIN
       AND stop_timestamp IS NULL
       AND NEW.fstate = 0;
 END;
+
+DROP VIEW IF EXISTS view_user_sessions;
+CREATE VIEW view_user_sessions AS
+SELECT *,
+	datetime(createdAt, 'unixepoch') as CreatedTime,
+	datetime(expiresAt, 'unixepoch') as ExpireTime,
+	strftime('%Y-%m-%d %I:%M %p', createdAt, 'unixepoch', 'localtime') AS createdAt_local,
+	strftime('%Y-%m-%d %I:%M %p', expiresAt, 'unixepoch', 'localtime') AS expiresAt_local
+FROM user_sessions
+
+DROP VIEW IF EXISTS view_fstate_cycles;
+CREATE VIEW view_fstate_cycles AS
+SELECT *,
+	strftime('%Y-%m-%d %I:%M %p', start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
+	strftime('%Y-%m-%d %I:%M %p', stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local
+FROM fstate_cycles
+
+DROP VIEW IF EXISTS view_tstate_cycles;
+CREATE VIEW view_tstate_cycles AS
+SELECT *,
+	strftime('%Y-%m-%d %I:%M %p', start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
+	strftime('%Y-%m-%d %I:%M %p', stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local
+FROM tstate_cycles

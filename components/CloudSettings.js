@@ -6,6 +6,8 @@ import { useThermostat } from "../context/ThermostatContext";
 import { useAuth } from "../context/AuthContext";
 import { HostnameContext } from "../context/HostnameContext";
 
+const Logger = require('./Logger');
+
 const CloudSettings = ({ thermostat }) => {
     const { getCloudSettings, updateCloudSettings, disableThermostat } = useThermostat();
     const { token } = useAuth();
@@ -33,6 +35,9 @@ const CloudSettings = ({ thermostat }) => {
                 .finally(() => setLoading(false));
         } catch (error) {
             console.error("Error fetching settings:", error);
+            Logger.error(`Error fetching settings: ${error.message}`, 'CloudSettings', 'fetchSettings');
+            Alert.alert("Error", "Failed to fetch cloud settings.");
+            setLoading(false);
         }
     };
 

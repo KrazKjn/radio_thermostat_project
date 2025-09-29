@@ -33,8 +33,9 @@ const apiFetch = async (url, method = "GET", body = null, token = null, errorMes
       console.log("Received refreshed token from server, updating storage ...");
       await AsyncStorage.setItem("auth_token", refreshedToken);
 
-      // Call the provided  function
-      await updateAuthFn(refreshedToken);
+      // Call the provided function
+      console.log("Updating token in memory and DB ...");
+      await updateAuthFn(token, refreshedToken);
     }
   } catch (error) {
     if (error.name === "AbortError") {

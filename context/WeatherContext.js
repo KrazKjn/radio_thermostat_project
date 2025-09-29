@@ -3,7 +3,10 @@ import { HostnameContext } from './HostnameContext';
 import { useAuth } from './AuthContext';
 import apiFetch from '../utils/apiFetch';
 
+const Logger = require('../components/Logger');
 const WeatherContext = createContext();
+const WEATHER_LATITUDE = 29.8238;
+const WEATHER_LONGITUDE = -90.4751;
 
 export const WeatherProvider = ({ children }) => {
     const [weatherData, setWeatherData] = useState(null);
@@ -11,13 +14,15 @@ export const WeatherProvider = ({ children }) => {
     const hostname = useContext(HostnameContext);
     const { token } = useAuth();
 
-    const fetchWeather = async () => {
+    const fetchWeather = async (latitude, longitude) => {
+        if (!latitude) latitude = WEATHER_LATITUDE;
+        if (!longitude) longitude = WEATHER_LONGITUDE;
+        if (!latitude || !longitude) {
+            console.warn('Invalid latitude or longitude');
+            return;
+        }
         try {
-            // Replace with your actual coordinates or get them dynamically
-            const latitude = '42.3478';
-            const longitude = '-71.0466';
-            
-            const data = await apiFetch(
+           const data = await apiFetch(
                 `${hostname}/weather?latitude=${latitude}&longitude=${longitude}`,
                 'GET',
                 null,
@@ -26,9 +31,12 @@ export const WeatherProvider = ({ children }) => {
             
             setWeatherData(data);
             setLastFetch(Date.now());
+            return data;
         } catch (error) {
             console.error('Error fetching weather:', error);
+            Logger.error(`Error fetching weather: ${error.message}`, 'WeatherContext', 'fetchWeather');
         }
+        return null;
     };
 
     // Fetch weather data every 5 minutes

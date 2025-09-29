@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const Logger = require('../../components/Logger');
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY || undefined;
 
@@ -12,18 +13,18 @@ class WeatherService {
 
     async getWeatherData(latitude, longitude) {
         if (!WEATHER_API_KEY) {
-            console.warn("WEATHER_API_KEY is not set. Weather data cannot be fetched.");
+            Logger.warn("WEATHER_API_KEY is not set. Weather data cannot be fetched.", 'WeatherService', 'getWeatherData');
             return null; // Weather API key not configured
         }
         // Check if cache is valid
         if (this.cache.data && this.cache.lastFetch && 
             (Date.now() - this.cache.lastFetch) < CACHE_DURATION) {
-            console.log("Returning cached weather data.");
+            Logger.info("Returning cached weather data.", 'WeatherService', 'getWeatherData');
             return this.cache.data;
         }
 
         try {
-            console.log("Fetching new weather data from API.");
+            Logger.info("Fetching new weather data from API.", 'WeatherService', 'getWeatherData');
             // Fetch new data from the weather API
             const response = await fetch(
                 `https://api.tomorrow.io/v4/weather/forecast?location=${latitude},${longitude}&units=imperial&apikey=${WEATHER_API_KEY}`
@@ -44,6 +45,7 @@ class WeatherService {
             return data;
         } catch (error) {
             console.error('Error fetching weather data:', error);
+            Logger.error(`Error fetching weather data: ${error.message}`, 'WeatherService', 'getWeatherData');
             throw error;
         }
     }

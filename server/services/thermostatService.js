@@ -3,7 +3,7 @@ const fetch = require("node-fetch");
 const arp = require('node-arp');
 const snmp = require("net-snmp");
 const axios = require("axios");
-const { getValidServiceToken } = require('./authService');
+const Logger = require('../../components/Logger');
 const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
 
 // Cache object to store thermostat data by IP
@@ -30,6 +30,7 @@ function getIdByIP(ip) {
         const thermostatRow = getThermostatIdStmt.get(ip);
         if (!thermostatRow) {
             console.error("Error: Thermostat not found for IP:", ip);
+            Logger.error(`Thermostat not found for IP: ${ip}`, 'thermostatService', 'getIdByIP');
             return null;
         }
         const thermostat_id = thermostatRow.id;
@@ -72,10 +73,10 @@ const updateThermostatScanMode2 = (ip, scanMode) => {
             ip
         );
 
-        console.log(`Saved DB data for ${ip}: scanMode: `, scanMode);
+        Logger.debug(`Saved DB data for ${ip}: scanMode: ${scanMode}`, 'thermostatService', 'updateThermostatScanMode2');
         return true;
     } catch (error) {
-        console.log(`Error saving DB data for ${ip}: error: `, error);
+        Logger.error(`Error saving DB data for ${ip}: ${error.message}`, 'thermostatService', 'updateThermostatScanMode2');
         return false;
     }
 }
@@ -91,10 +92,10 @@ const updateThermostatEnabled = (ip, enabled) => {
             ip
         );
 
-        console.log(`Saved DB data for ${ip}: enabled: `, enabled);
+        Logger.debug(`Saved DB data for ${ip}: enabled: ${enabled}`, 'thermostatService', 'updateThermostatEnabled');
         return true;
     } catch (error) {
-        console.log(`Error saving DB data for ${ip}: error: `, error);
+        Logger.error(`Error saving DB data for ${ip}: ${error.message}`, 'thermostatService', 'updateThermostatEnabled');
         return false;
     }
 }
@@ -107,11 +108,12 @@ async function scannerIntervalTask(ip) {
         let data = undefined;
         if (scanMode !== undefined && scanMode === 0) {
             console.error("Error: Thermostat scan mode is 0 (Disabled) for IP:", ip);
+            Logger.warn(`Thermostat scan mode is 0 (Disabled) for IP: ${ip}`, 'thermostatService', 'scannerIntervalTask');
             return;
         }
         if (scanMode === undefined || scanMode === 1) {
             // Always get a valid service token
-            const token = getValidServiceToken();
+            const token = getValid();
             const headers = { "Authorization": `Bearer ${token}` };
 
             const response = await fetch(`http://localhost:${process.env.PORT || 5000}/tstat/${ip}`, {
@@ -120,7 +122,7 @@ async function scannerIntervalTask(ip) {
             });
             data = await response.json();
 
-            console.log(`Scanned data from ${ip}:`, data);
+            Logger.debug(`Scanned data from ${ip}: ${JSON.stringify(data, null, 2)}`, 'thermostatService', 'scannerIntervalTask');
 
             // Database insertion
             const stmt = db.prepare(`
@@ -137,7 +139,7 @@ async function scannerIntervalTask(ip) {
                 data.fstate
             );
 
-            console.log(`Saved DB data for ${ip}:`, data);
+            Logger.debug(`Saved DB data for ${ip}: ${JSON.stringify(data, null, 2)}`, 'thermostatService', 'scannerIntervalTask');
         } else {
             const getThermostatDataStmt = db.prepare(`
                 SELECT * FROM scan_data WHERE thermostat_id = ? ORDER BY timestamp DESC LIMIT 1;
@@ -168,7 +170,7 @@ async function scannerIntervalTask(ip) {
             } else if (thermostatRow.tmode === HVAC_MODE_HEAT) {
                 data.t_heat = thermostatRow.tTemp; // Use tTemp for heating mode
             }
-            console.log(`Queried DB data for ${ip}:`, data);
+            Logger.debug(`Queried DB data for ${ip}: ${Logger.formatJSON(data)}`, 'thermostatService', 'scannerIntervalTask');
         }
         cache[ip] = cache[ip] || { values: [] };
         const updatedData = { timestamp: currentTime, ...data };
@@ -180,20 +182,21 @@ async function scannerIntervalTask(ip) {
         }
     } catch (error) {
         console.error(`Error scanning ${ip}:`, error);
+        Logger.error(`Error scanning ${ip}: ${error.message}`, 'thermostatService', 'scannerIntervalTask'); 
     }
 }
 
 async function scanSubnet(subnet, timeout = 5000) {
     const results = [];
 
-    console.log(`${Date().toString()}: Scanning for thermostats ...`);
+    Logger.info(`Scanning for thermostats in subnet ${subnet} ...`, 'thermostatService', 'scanSubnet');
     for (let i = 1; i <= 254; i++) {
         const ip = `${subnet}.${i}`;
         const mac = await getMacAddress(ip);
 
         if (mac) {
             let location = undefined;
-            console.log(`${Date().toString()}: Scanning device on ${ip}/${mac} ...`);
+            Logger.info(`Scanning device on ${ip}/${mac} ...`, 'thermostatService', 'scanSubnet');
             if (false) {
                 location = await getDeviceName(ip);
                 const manufacturer = await lookupMac(mac);
@@ -214,19 +217,19 @@ async function scanSubnet(subnet, timeout = 5000) {
                     data = await response.json();
                     model = data.model;
                     manufacturer = "Radio Thermostat"
-                    console.log(`${Date().toString()}: Device on ${ip}/${mac} is a Thermostat ...`);
+                    Logger.info(`Device on ${ip}/${mac} is a Thermostat ...`, 'thermostatService', 'scanSubnet');
                     results.push({ id: getIdByIP(ip), ip, mac, manufacturer, location, model });
                 }
             } catch (error) {
                 if (error.name === "AbortError") {
-                    console.log(`${Date().toString()}: Timeout checking Device on ${ip}/${mac} ...`);
+                    Logger.warn(`Timeout checking Device on ${ip}/${mac} ...`, 'thermostatService', 'scanSubnet');
                 } else {
-                    console.log(`${Date().toString()}: Device on ${ip}/${mac} is not a Thermostat ...`);
+                    Logger.error(`Device on ${ip}/${mac} is not a Thermostat ...`, 'thermostatService', 'scanSubnet');
                 }
             }
         }
     }
-    console.log(`${Date().toString()}: Scanning for thermostats ... Done!`);
+    Logger.info(`Scanning for thermostats in subnet ${subnet} ... Done!`, 'thermostatService', 'scanSubnet');
 
     return JSON.stringify(results, null, 2);
 }

@@ -6,6 +6,7 @@ const { convertToTwoDecimalFloat, formatTimestamp } = require('../utils/utils');
 const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
 const { HVAC_SCAN_CLOUD } = require('../../constants/hvac_scan');
 const crypto = require('../utils/crypto');
+const Logger = require('../../components/Logger');
 
 const cache = {};
 const CACHE_LIMIT = 120; // Limit cache size to 120 entries
@@ -16,7 +17,7 @@ const daysOfWeek = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 const getThermostatData = async (req, res) => {
     try {
-        console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
+        Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostatData');
         const ip = req.params.ip;
         const currentTime = Date.now();
         const noCache = req.query.noCache === "true"; // Check for cache override
@@ -33,11 +34,11 @@ const getThermostatData = async (req, res) => {
         if (!noCache &&
             cache[ip]?.values?.length &&
             expiredData) {
-            console.log(`[Thermostat] Returning cached data for IP ${ip}`);
+            Logger.info(`[Thermostat] Returning cached data for IP ${ip}`, 'ThermostatController', 'getThermostatData');
             return res.json(cache[ip].values[0]); // Return the most recent cached value
         }
-        console.log(`[Thermostat] Fetching new data for IP ${ip}`);
-        console.log(`[Thermostat] noCache: ${noCache}, cache exists: ${!!cache[ip]}, cache length: ${cache[ip]?.values?.length}, lastUpdated: ${new Date(cache[ip]?.lastUpdated).toString()}, currentTime: ${new Date(currentTime).toString()}, time since last update: ${currentTime - (cache[ip]?.lastUpdated || 0)}`);
+        Logger.debug(`[Thermostat] Fetching new data for IP ${ip}`, 'ThermostatController', 'getThermostatData', 1);
+        Logger.debug(`[Thermostat] noCache: ${noCache}, cache exists: ${!!cache[ip]}, cache length: ${cache[ip]?.values?.length}, lastUpdated: ${new Date(cache[ip]?.lastUpdated).toString()}, currentTime: ${new Date(currentTime).toString()}, time since last update: ${new Date(currentTime - (cache[ip]?.lastUpdated).toString() || 0)}`, 'ThermostatController', 'getThermostatData', 1);
 
         // Fetch new data
         const response = await fetch(`http://${ip}/tstat`);
@@ -46,7 +47,7 @@ const getThermostatData = async (req, res) => {
         // Update cache
         cache[ip] = cache[ip] || { values: [] };
         if (cache[ip].source !== 'cloud') {
-            console.log(`[Thermostat] Updating cached data for IP ${ip}`);
+            Logger.debug(`[Thermostat] Updating cached data for IP ${ip}`, 'ThermostatController', 'getThermostatData');
             const [ scanInterval, scanMode ] = getThermostatScanMode(ip);
             data.scanMode = scanMode;
             data.scanInterval = scanInterval;
@@ -67,18 +68,18 @@ const getThermostatData = async (req, res) => {
 };
 
 const updateThermostat = async (req, res) => {
-    console.log(`${Date().toString()}: Received POST request: ${req.url}`); // Log the request body
-    console.log("Request Body:", JSON.stringify(req.body, null, 2)); // Logs JSON with formatting
+    Logger.info(`Received POST request: ${req.url}`); // Log the request body
+    Logger.debug("Request Body:", 'ThermostatController', 'updateThermostat', 2);
     const { tmode, temperature, time, fmode, hold, override } = req.body; // Get values from request
     const { ip } = req.params; // Get ip from request parameters
     // Validate request body
     if (!ip) {
-        console.log("IP address is missing in the request parameters.");
+        Logger.warn("IP address is missing in the request parameters.", 'ThermostatController', 'updateThermostat');
         return res.status(400).json({ error: "Missing target ip address" });
     }
     if (!time) {
         if (tmode === undefined && fmode === undefined && hold === undefined && override === undefined) {
-            console.log("time, tmode, fmode, hold, and override are all missing in the request body. One is required.");
+            Logger.warn("time, tmode, fmode, hold, and override are all missing in the request body. One is required.", 'ThermostatController', 'updateThermostat');
             return res.status(400).json({ error: "Missing required fields: tmode, fmode, hold, override" });
         }
     }
@@ -92,7 +93,7 @@ const updateThermostat = async (req, res) => {
         hold: hold === undefined ? undefined : Number(hold), // ? Only set hold if provided
         override: override === undefined ? undefined : Number(override) // ? Only set override if provided
     };
-    console.log("POST body:", JSON.stringify(payload)); // Log the post body
+    Logger.debug(`POST body: ${JSON.stringify(payload, null, 2)}`, 'ThermostatController', 'updateThermostat', 2); // Log the post body
 
     try {
         const response = await fetch(`http://${ip}/tstat`, {
@@ -129,7 +130,7 @@ const getCache = (req, res) => {
 
 const getModel = async (req, res) => {
     try {
-        console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
+        Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getModel', 1);
         const ip = req.params.ip;
         const response = await fetch(`http://${ip}/tstat/model`);
         const data = await response.json();
@@ -141,7 +142,7 @@ const getModel = async (req, res) => {
 
 const getName = async (req, res) => {
     try {
-        console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
+        Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getName', 1);
         const ip = req.params.ip;
         const response = await fetch(`http://${ip}/sys/name`);
         const data = await response.json();
@@ -153,7 +154,7 @@ const getName = async (req, res) => {
 
 const getSwing = async (req, res) => {
     try {
-        console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
+        Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getSwing', 1);
         const ip = req.params.ip;
         const response = await fetch(`http://${ip}/tstat/tswing`);
         const data = await response.json();
@@ -165,14 +166,14 @@ const getSwing = async (req, res) => {
 
 const getThermostat = async (req, res) => {
     try {
-        console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
+        Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostat', 1);
         const { ip } = req.params;
         const endpoints = {
             model: `http://${ip}/tstat/model`,
             name: `http://${ip}/sys/name`,
         };
         let combinedData = {};
-        console.log(`${Date().toString()}: Invoking: ${ JSON.stringify(endpoints)}`);
+        Logger.debug(`Invoking:  ${ JSON.stringify(endpoints, null, 2)}`, 'ThermostatController', 'getThermostat', 2);
         if (ip.includes("192.168.100")) {
             combinedData = {
                 ip: "192.168.100.10",
@@ -201,7 +202,7 @@ const getThermostat = async (req, res) => {
 
 const getThermostatDetailed = async (req, res) => {
     try {
-        console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
+        Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostatDetailed', 1);
         const { ip } = req.params;
         const endpoints = {
             model: `http://${ip}/tstat/model`,
@@ -210,7 +211,7 @@ const getThermostatDetailed = async (req, res) => {
             cloud: `http://${ip}/cloud`,
         };
         let combinedData = {};
-        console.log(`${Date().toString()}: Invoking: ${ JSON.stringify(endpoints) }`);
+        Logger.debug(`Invoking: ${ JSON.stringify(endpoints, null, 2) }`, 'ThermostatController', 'getThermostatDetailed', 2);
         if (ip.includes("192.168.100")) {
             combinedData = {
                 id: null,
@@ -247,18 +248,18 @@ const getThermostatDetailed = async (req, res) => {
 
 const getSchedule = async (req, res) => {
     try {
-        console.log(`${new Date().toString()}: Received GET request: ${req.url}`);
+        Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getSchedule', 1);
 
         const ip = req.params.ip;
         let scheduleMode = req.params.scheduleMode.toLowerCase(); // Ensure case insensitivity
 
         // Validate scheduleMode
         if (!["cool", "heat"].includes(scheduleMode)) {
-            console.log("Invalid schedule mode. Use 'cool' or 'heat'.");
+            Logger.error("Invalid schedule mode. Use 'cool' or 'heat'.", 'ThermostatController', 'getSchedule');
             return res.status(400).json({ error: "Invalid schedule mode. Use 'cool' or 'heat'." });
         }
 
-        console.log(`${new Date().toString()}: Invoking: http://${ip}/tstat/program/${scheduleMode}`);
+        Logger.debug(`Invoking: http://${ip}/tstat/program/${scheduleMode}`, 'ThermostatController', 'getSchedule', 2);
 
         const response = await fetch(`http://${ip}/tstat/program/${scheduleMode}`);
         if (!response.ok) throw new Error("Failed to fetch data from thermostat");
@@ -267,16 +268,17 @@ const getSchedule = async (req, res) => {
         res.json(data);
     } catch (error) {
         console.error("Error:", error);
+        Logger.error(`Error retrieving thermostat schedule data: ${error.message}`, 'ThermostatController', 'getSchedule');
         res.status(500).json({ error: "Failed to retrieve thermostat schedule data" });
     }
 };
 
 const getCloud = async (req, res) => {
     try {
-        console.log(`${new Date().toString()}: Received GET request: ${req.url}`);
+        Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getCloud', 1);
 
         const ip = req.params.ip;
-        console.log(`${new Date().toString()}: Invoking: http://${ip}/cloud`);
+        Logger.debug(`Invoking: http://${ip}/cloud`, 'ThermostatController', 'getCloud', 2);
 
         const response = await fetch(`http://${ip}/cloud`);
         if (!response.ok) throw new Error("Failed to fetch data from thermostat");
@@ -293,12 +295,13 @@ const getCloud = async (req, res) => {
         res.json(data);
     } catch (error) {
         console.error("Error:", error);
+        Logger.error(`Error retrieving thermostat cloud data: ${error.message}`, 'ThermostatController', 'getCloud');
         res.status(500).json({ error: "Failed to retrieve thermostat cloud data" });
     }
 };
 
 const updateName = async (req, res) => {
-    console.log(`${Date().toString()}: Received POST request: ${req.url}`); // Log the request body
+    Logger.debug(`Received POST request: ${req.url}`, 'ThermostatController', 'updateName', 1);
     const { name } = req.body; // Get values from request
     const { ip } = req.params;
     // Validate request body
@@ -308,8 +311,8 @@ const updateName = async (req, res) => {
     const payload = {
       name: name
     };
-    console.log("POST body:", JSON.stringify(payload)); // Log the post body
-  
+    Logger.debug(`POST body: ${JSON.stringify(payload, null, 2)}`, 'ThermostatController', 'updateName');
+
     try {
         const response = await fetch(`http://${ip}/sys/name`, {
             method: "POST",
@@ -325,7 +328,7 @@ const updateName = async (req, res) => {
 };
 
 const rebootServer = async (req, res) => {
-    console.log(`${Date().toString()}: Received POST request: ${req.url}`); // Log the request body
+    Logger.debug(`Received POST request: ${req.url}`, 'ThermostatController', 'rebootServer', 1);
     const { ip } = req.params;
 
     try {
@@ -343,7 +346,7 @@ const rebootServer = async (req, res) => {
 };
 
 const updateSwing = async (req, res) => {
-    console.log(`${Date().toString()}: Received POST request: ${req.url}`); // Log the request body
+    Logger.debug(`Received POST request: ${req.url}`, 'ThermostatController', 'updateSwing', 1);
     const { tswing } = req.body; // Get values from request
     const { ip } = req.params;
     // Validate request body
@@ -353,8 +356,8 @@ const updateSwing = async (req, res) => {
     const payload = {
         tswing: convertToTwoDecimalFloat(tswing)
     };
-    console.log("POST body:", JSON.stringify(payload)); // Log the post body
-  
+    Logger.debug(`POST body: ${JSON.stringify(payload, null, 2)}`, 'ThermostatController', 'updateSwing');
+
     try {
         const response = await fetch(`http://${ip}/tstat/tswing`, {
             method: "POST",
@@ -371,7 +374,7 @@ const updateSwing = async (req, res) => {
 
 const updateSchedule = async (req, res) => {
     try {
-        console.log(`${new Date().toString()}: Received POST request: ${req.url}`);
+        Logger.debug(`Received POST request: ${req.url}`, 'ThermostatController', 'updateSchedule', 1);
 
         const ip = req.params.ip;
         let scheduleMode = req.params.scheduleMode.toLowerCase(); // Ensure case insensitivity
@@ -385,18 +388,18 @@ const updateSchedule = async (req, res) => {
 
         // Validate scheduleMode
         if (!["cool", "heat"].includes(scheduleMode)) {
-            console.log("Invalid schedule mode. Use 'cool' or 'heat'.");
+            Logger.error("Invalid schedule mode. Use 'cool' or 'heat'.", 'ThermostatController', 'updateSchedule');
             return res.status(400).json({ error: "Invalid schedule mode. Use 'cool' or 'heat'." });
         }
 
-        console.log(`${new Date().toString()}: Invoking: http://${ip}/tstat/program/${scheduleMode}`);
+        Logger.debug(`Invoking: http://${ip}/tstat/program/${scheduleMode}`, 'ThermostatController', 'updateSchedule', 2);
 
         // Validate request body
         if (!data) {
             return res.status(400).json({ error: "Missing new data value" });
         }
         try {
-            console.log("POST body:", data); // Log the post body
+            Logger.debug(`POST body: ${data}`, 'ThermostatController', 'updateSchedule');
         } catch {}
 
         const response = await fetch(`http://${ip}/tstat/program/${scheduleMode}`, {
@@ -406,18 +409,18 @@ const updateSchedule = async (req, res) => {
         });
     
         const respData = await response.json();
-        console.log("POST response:", JSON.stringify(respData)); // Log the post response
+        Logger.debug(`POST response: ${JSON.stringify(respData, null, 2)}`, 'ThermostatController', 'updateSchedule', 1);
         res.json(respData);
     } catch (error) {
-        console.log("Error: ", error);
         console.error("Error: ", error);
+        Logger.error(`Error updating thermostat schedule data: ${error.message}`, 'ThermostatController', 'updateSchedule');
         res.status(500).json({ error: "Failed to update thermostat schedule data" });
     }
 };
 
 const updateScheduleDay = async (req, res) => {
     try {
-        console.log(`${new Date().toString()}: Received POST request: ${req.url}`);
+        Logger.debug(`Received POST request: ${req.url}`, 'ThermostatController', 'updateScheduleDay', 1);
 
         const ip = req.params.ip;
         let scheduleMode = req.params.scheduleMode.toLowerCase(); // Ensure case insensitivity
@@ -426,18 +429,18 @@ const updateScheduleDay = async (req, res) => {
 
         // Validate scheduleMode
         if (!["cool", "heat"].includes(scheduleMode)) {
-            console.log("Invalid schedule mode. Use 'cool' or 'heat'.");
+            Logger.error("Invalid schedule mode. Use 'cool' or 'heat'.", 'ThermostatController', 'updateScheduleDay');
             return res.status(400).json({ error: "Invalid schedule mode. Use 'cool' or 'heat'." });
         }
 
-        console.log(`${new Date().toString()}: Invoking: http://${ip}/tstat/program/${scheduleMode}/${day}`);
+        Logger.debug(`Invoking: http://${ip}/tstat/program/${scheduleMode}/${day}`, 'ThermostatController', 'updateScheduleDay', 2);
 
         // Validate request body
         if (!data) {
             return res.status(400).json({ error: "Missing new data value" });
         }
         try {
-            console.log("POST body:", data); // Log the post body
+            Logger.debug(`POST body: ${data}`, 'ThermostatController', 'updateScheduleDay');
         } catch {}
 
         const response = await fetch(`http://${ip}/tstat/program/${scheduleMode}/${daysOfWeek[day]}`, {
@@ -447,29 +450,29 @@ const updateScheduleDay = async (req, res) => {
         });
     
         const respData = await response.json();
-        console.log("POST response:", JSON.stringify(respData)); // Log the post response
+        Logger.debug(`POST response: ${JSON.stringify(respData)}`, 'ThermostatController', 'updateScheduleDay', 1);
         res.json(respData);
     } catch (error) {
-        console.log("Error: ", error);
         console.error("Error: ", error);
+        Logger.error(`Error updating thermostat schedule data: ${error.message}`, 'ThermostatController', 'updateScheduleDay');
         res.status(500).json({ error: "Failed to update thermostat schedule data" });
     }
 };
 
 const updateCloud = async (req, res) => {
     try {
-        console.log(`${new Date().toString()}: Received POST request: ${req.url}`);
+        Logger.debug(`Received POST request: ${req.url}`, 'ThermostatController', 'updateCloud', 1);
 
         const ip = req.params.ip;
 
-        console.log(`${new Date().toString()}: Invoking: http://${ip}/cloud`);
+        Logger.debug(`Invoking: http://${ip}/cloud`, 'ThermostatController', 'updateCloud', 2);
 
         // Validate request body
         if (!req.body) {
             return res.status(400).json({ error: "Missing new data value" });
         }
         try {
-            console.log("POST body:", data); // Log the post body
+            Logger.debug(`POST body: ${JSON.stringify(req.body, null, 2)}`, 'ThermostatController', 'updateCloud', 3);
         } catch {}
 
         if (req.body.scanMode !== undefined) {
@@ -493,11 +496,11 @@ const updateCloud = async (req, res) => {
         });
     
         const respData = await response.text();
-        console.log("POST response:", respData);
+        Logger.debug(`POST response: ${respData}`, 'ThermostatController', 'updateCloud', 1);
         res.json(respData);
     } catch (error) {
-        console.log("Error: ", error);
         console.error("Error: ", error);
+        Logger.error(`Error updating thermostat cloud data: ${error.message}`, 'ThermostatController', 'updateCloud');
         res.status(500).json({ error: "Failed to update thermostat cloud data" });
     }
 };
@@ -515,9 +518,10 @@ const startScanner = (req, res) => {
             await scannerIntervalTask(ip);
         } catch (error) {
             console.error(`Error in scanner interval task for ${ip}:`, error);
+            Logger.error(`Error in scanner interval task for ${ip}: ${error.message}`, 'ThermostatController', 'startScanner');
         }
     }, interval);
-    console.log(`Scanner started for ${ip}: ${interval / 1000} seconds interval`);
+    Logger.info(`Scanner started for ${ip}: ${interval / 1000} seconds interval`, 'ThermostatController', 'startScanner');
 
     res.json({ message: `Scanner started for ${ip}.` });
 };
@@ -556,7 +560,7 @@ const getScannerStatus = (req, res) => {
 
 function getScannerDataByIp(ip) {
     if (!cache[ip]) {
-        console.warn(`[Thermostat] No cached data for IP ${ip}. Initializing empty array.`);
+        Logger.warn(`[Thermostat] No cached data for IP ${ip}. Initializing empty array.`, 'ThermostatController', 'getScannerDataByIp');
         cache[ip] = [];
     }
 
@@ -566,22 +570,24 @@ function getScannerDataByIp(ip) {
         `).get(ip).count;
 
         const queryStatement = `
-            SELECT datetime(timestamp / 1000, 'unixepoch') AS formatted_date, * FROM thermostat_readings
+            SELECT datetime(timestamp / 1000, 'unixepoch') AS formatted_date, *
+            FROM thermostat_readings
             WHERE ip = '${ip}' 
             ORDER BY timestamp DESC
             LIMIT ${CACHE_LIMIT}
         `;
         const rows = db.prepare(`
-            SELECT datetime(timestamp / 1000, 'unixepoch') AS formatted_date, * FROM thermostat_readings
+            SELECT datetime(timestamp / 1000, 'unixepoch') AS formatted_date, *
+            FROM thermostat_readings
             WHERE ip = ? 
             ORDER BY timestamp DESC
             LIMIT ${CACHE_LIMIT}
         `).all(ip);
 
         const dbInfo = db.prepare('PRAGMA database_list').get();
-        console.log(`Full database path: ${dbInfo.file}`);
-        console.log(`Executing query: ${queryStatement}`);
-        console.log(`Fetched ${rows.length} rows out of ${totalRows} total rows for IP ${ip}.`);
+        Logger.debug(`Full database path: ${dbInfo.file}`, 'ThermostatController', 'getScannerDataByIp', 1);
+        Logger.debug(`Executing query: ${queryStatement}`, 'ThermostatController', 'getScannerDataByIp', 1);
+        Logger.debug(`Fetched ${rows.length} rows out of ${totalRows} total rows for IP ${ip}.`, 'ThermostatController', 'getScannerDataByIp', 1);
 
         cache[ip].values = rows.map(row => {
             const entry = {
@@ -595,7 +601,9 @@ function getScannerDataByIp(ip) {
                 fstate: row.fstate,
                 t_type_post: 0,
                 time: formatTimestamp(row.timestamp),
-                formatted_date: row.formatted_date
+                formatted_date: row.formatted_date,
+                outdoor_temp: row.outdoor_temp,
+                cloud_cover: row.cloud_cover
             };
 
             if (row.tmode === HVAC_MODE_COOL) {
@@ -642,9 +650,10 @@ const restartScanner = (req, res) => {
             await scannerIntervalTask(ip);
         } catch (error) {
             console.error(`Error in scanner interval task for ${ip}:`, error);
+            Logger.error(`Error in scanner interval task for ${ip}: ${error.message}`, 'ThermostatController', 'restartScanner');
         }
     }, interval);
-    console.log(`Scanner restarted for ${ip}: ${interval / 1000} seconds interval`);
+    Logger.info(`Scanner restarted for ${ip}: ${interval / 1000} seconds interval`, 'ThermostatController', 'restartScanner');
 
     res.json({ message: `Scanner restarted for ${ip}.` });
 };
@@ -670,8 +679,8 @@ const getThermostats = (req, res) => {
         SELECT * FROM thermostats
     `).all();
 
-    console.log(`${Date().toString()}: Received GET request: ${req.url}`); // Log the request body
-    console.log("Thermostat rows:", JSON.stringify(rows, null, 2)); // Log the thermostat rows
+    Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostats'); // Log the request body
+    Logger.debug("Thermostat rows:", JSON.stringify(rows, null, 2), 'ThermostatController', 'getThermostats'); // Log the thermostat rows
     res.json(rows);
 };
 
@@ -745,7 +754,8 @@ const updateWeatherData = async () => {
         const intervals = weatherData.timelines?.minutely || [];
 
         if (intervals.length === 0) {
-            console.log("No minutely data found.", weatherData);
+            Logger.info(`No minutely data found.`, 'WeatherService', 'updateWeatherData');
+            Logger.debug(`Full weather data: ${JSON.stringify(weatherData, null, 2)}`, 'WeatherService', 'updateWeatherData', 2);
             return;
         }
 
@@ -775,7 +785,7 @@ const updateWeatherData = async () => {
                         minuteKey,
                     );
                     if (result.changes === 1) {
-                        console.log(`Current Weather data saved: ${minuteKey} => temp: ${temperature}, cloud cover: ${cloudCover}`);
+                        Logger.debug(`Current Weather data saved: ${minuteKey} => temp: ${temperature}, cloud cover: ${cloudCover}`, 'WeatherService', 'updateWeatherData', 1);
                     } else {
                         // Update the latest entry with the lastest values
                         const fallbackStmt = db.prepare(`
@@ -786,18 +796,22 @@ const updateWeatherData = async () => {
                             LIMIT 1
                         `);
                         fallbackStmt.run(temperature, cloudCover);
-                        console.log(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}`);
+                        Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}`, 'WeatherService', 'updateWeatherData', 1);
+                        return { temperature, cloudCover };
                     }
                 }
                 catch (error) {
                     console.error(`Thermostat update failed for ${minuteKey}:`, error.message);
+                    Logger.error(`Thermostat update failed for ${minuteKey}: ${error.message}`, 'WeatherService', 'updateWeatherData');
                 }
             }
         }
     }
     catch (error) {
         console.log("Failed to update weather data.", error);
+        Logger.error(`Failed to update weather data: ${error.message}`, 'WeatherService', 'updateWeatherData');
     }
+    return null;
 }
 
 const captureStatIn = async (req, res) => {
@@ -805,9 +819,9 @@ const captureStatIn = async (req, res) => {
     const currentTime = Date.now();
     const bodyB = req.body;
 
-    console.log(`${crypto.formatUnixTime(currentTime)}: Received POST request: ${req.url}`); // Log the request body
+    Logger.info(`Received ${req.url}`, 'ThermostatController', 'captureStatIn'); // Log the request body
     if (process.env.DEBUG === "true") {
-        console.log("Streamed Binary Data:", bodyB); // Print raw binary stream
+        Logger.debug(`Streamed Binary Data: ${bodyB}`, 'ThermostatController', 'captureStatIn', 1); // Print raw binary stream
     }
 
     const offsetB = bodyB.indexOf(Buffer.from("}"));
@@ -848,8 +862,8 @@ const captureStatIn = async (req, res) => {
         const authkey = crypto.encode(process.env.THERMOSTAT_AUTH_KEY || "beaa4c96");
 
     if (process.env.DEBUG === "true") {
-        console.log(uuid.toString('hex')); // Convert back to string if needed
-        console.log(authkey.toString('hex'));
+        Logger.debug(uuid.toString('hex'), 'ThermostatController', 'captureStatIn', 1); // Convert back to string if needed
+        Logger.debug(authkey.toString('hex'), 'ThermostatController', 'captureStatIn', 1);
     }
 
     const aesKey = crypto.genAesKey(uuid, authkey);
@@ -859,25 +873,25 @@ const captureStatIn = async (req, res) => {
     let responsePlaintext;
 
     if (process.env.DEBUG === "true") {
-        console.log("Encryption data:");
-        console.log("UUID (Hex): ", uuid.toString('hex'))
-        console.log("AuthKey (Hex): ", authkey.toString('hex'))
-        console.log("AES Key (Hex): ", aesKey.toString('hex'));
-        console.log("Hash Key (Hex): ", hashKey.toString('hex'));
-        console.log("EIV Key (Hex): ", eiv.toString('hex'));
+        Logger.debug("Encryption data:", 'ThermostatController', 'captureStatIn', 1);
+        Logger.debug(`UUID (Hex): ${uuid.toString('hex')}`, 'ThermostatController', 'captureStatIn', 1);
+        Logger.debug(`AuthKey (Hex): ${authkey.toString('hex')}`, 'ThermostatController', 'captureStatIn', 1);
+        Logger.debug(`AES Key (Hex): ${aesKey.toString('hex')}`, 'ThermostatController', 'captureStatIn', 1);
+        Logger.debug(`Hash Key (Hex): ${hashKey.toString('hex')}`, 'ThermostatController', 'captureStatIn', 1);
+        Logger.debug(`EIV Key (Hex): ${eiv.toString('hex')}`, 'ThermostatController', 'captureStatIn', 1);
     }
 
     const encryptedData = bodyB.subarray(offsetB + 1);
     if (process.env.DEBUG === "true") {
-        console.log("Length of Encrypted Data: ", encryptedData.length);
-        console.log("Encrypted Data (Hex): ", encryptedData.toString('hex'));
+        Logger.debug(`Length of Encrypted Data: ${encryptedData.length}`, 'ThermostatController', 'captureStatIn', 1);
+        Logger.debug(`Encrypted Data (Hex): ${encryptedData.toString('hex')}`, 'ThermostatController', 'captureStatIn', 1);
     }
     requestPlaintext = crypto.decAuth(aesKey, hashKey, eiv, encryptedData);
     if (requestPlaintext === null || requestPlaintext === undefined) {
         res.status(400).send('Decryption failed');
         return;
     }
-    console.log("[thermostat to us] =>", crypto.parseJSON(requestPlaintext));
+    Logger.info(`[thermostat to us] => ${crypto.parseJSON(requestPlaintext)}`, 'ThermostatController', 'captureStatIn');
 
     const jsonString = requestPlaintext.toString("utf-8"); // Convert to string
     const jsonData = JSON.parse(jsonString);  // Convert to JSON object
@@ -897,6 +911,7 @@ const captureStatIn = async (req, res) => {
                 const thermostatRow = getThermostatIdStmt.get(jsonHdr.uuid);
                 if (!thermostatRow) {
                     console.error("Error: Thermostat not found for UUID:", jsonHdr.uuid);
+                    Logger.error(`Thermostat not found for UUID: ${jsonHdr.uuid}`, 'ThermostatController', 'captureStatIn');
                     return;
                 }
                 thermostat_id = thermostatRow.id;
@@ -905,7 +920,7 @@ const captureStatIn = async (req, res) => {
                 addDeviceByUUID(jsonHdr.uuid, thermostat_id);
             } catch (error) {
                 console.error("Error: Thermostat not found for UUID:", jsonHdr.uuid);
-                console.log(`Error: Thermostat not found for UUID: ${jsonHdr.uuid}. Error: ${error}`);
+                Logger.error(`Error: Thermostat not found for UUID: ${jsonHdr.uuid}. Error: ${error}`, 'ThermostatController', 'captureStatIn');
             }
         }
         if (process.env.DATABASE === "true" || saveToDatabase) {
@@ -924,7 +939,7 @@ const captureStatIn = async (req, res) => {
                     jsonData.tstat.tstate,
                     jsonData.tstat.fstate,
                 );
-                console.log("Thermostat data saved: ", location);
+                Logger.info(`Thermostat data saved: ${location}`, 'ThermostatController', 'captureStatIn');
                 if (!cache[ip]) {
                     getScannerDataByIp(ip); // Initialize cache if not present
                 }
@@ -943,11 +958,15 @@ const captureStatIn = async (req, res) => {
                 if (cache[ip].values.length > CACHE_LIMIT) {
                     cache[ip].values.pop(); // Remove oldest value
                 }
+                // Update weather data
+                const weatherData = await updateWeatherData();
+                cache[ip].outdoor_temp = weatherData ? weatherData.temperature : null;
+                cache[ip].cloud_cover = weatherData ? weatherData.cloudCover : null;
+
             } catch (error) {
-                console.log(`Error saving Thermostat data for: ${location}. Error: ${error}`);
+                console.error(`Error saving Thermostat data for ${location}:`, error);
+                Logger.error(`Error saving Thermostat data for ${location}: ${error}`, 'ThermostatController', 'captureStatIn');
             }
-            // Update weather data
-            await updateWeatherData();
         }
     }
 
@@ -976,7 +995,7 @@ const captureStatIn = async (req, res) => {
                     return;
                 }
 
-                console.log("[us to thermostat] <=", responsePlaintext.toString());
+                Logger.info(`[us to thermostat] <= ${responsePlaintext.toString()}`, 'ThermostatController', 'captureStatIn');
                 const responseEncrypted = crypto.encAuth(aesKey, hashKey, eiv, responsePlaintext);
 
                 res.status(200).header('Content-Type', 'application/octet-stream').send(responseEncrypted);
@@ -988,7 +1007,7 @@ const captureStatIn = async (req, res) => {
         forwardReq.end();
     } else {
         responsePlaintext = Buffer.from('{"ignore":0}');
-        console.log("[us to thermostat] <=", responsePlaintext.toString());
+        Logger.info(`[us to thermostat] <= ${responsePlaintext.toString()}`, 'ThermostatController', 'captureStatIn');
 
         const responseEncrypted = crypto.encAuth(aesKey, hashKey, eiv, responsePlaintext);
         res.status(200).header('Content-Type', 'application/octet-stream').send(responseEncrypted);

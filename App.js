@@ -7,6 +7,7 @@ import { ThermostatProvider } from "./context/ThermostatContext";
 import LoginScreen from "./components/LoginScreen";
 import { UserProvider } from './context/UserContext';
 import { DataRefreshProvider } from "./context/DataRefreshContext";
+import { WeatherProvider } from "./context/WeatherContext";
 
 const showAlert = () => {
   if (Platform.OS === "web") {
@@ -45,11 +46,13 @@ const App = () => {
     <HostnameProvider>
       <AuthProvider>
         <UserProvider>
-          <ThermostatProvider>
-            <DataRefreshProvider>
-              <AppContent />
-            </DataRefreshProvider>
-          </ThermostatProvider>            
+          <WeatherProvider>
+            <ThermostatProvider>
+              <DataRefreshProvider>
+                <AppContent />
+              </DataRefreshProvider>
+            </ThermostatProvider>
+            </WeatherProvider>
         </UserProvider>
       </AuthProvider>
     </HostnameProvider>

@@ -10,6 +10,8 @@ import commonStyles from "../styles/commonStyles";
 import { HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO } from '../constants/hvac_mode'; // Import HVAC modes
 import DataRefreshContext from "../context/DataRefreshContext";
 
+const Logger = require('./Logger');
+
 const DataChart = ({ thermostatIp, parentComponent = null }) => {
     const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
@@ -28,11 +30,9 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
     const fetchData = async () => {
         try {
             const scannedData = await fetchScannedData(thermostatIp, hostname, token);
-            let localDateTime = new Date(Date.now()).toLocaleString();
-            console.log(`${localDateTime} [DataChart] Data fetched: `, scannedData);
+            Logger.debug(`Data fetched: ${scannedData}`, 'DataChart', 'fetchData', 2);
             let filteredData = scannedData.filter(entry => entry.temp !== 0);
-            localDateTime = new Date(Date.now()).toLocaleString();            
-            console.log(`${localDateTime} [DataChart] Data fetched (filteredData): `, filteredData);
+            Logger.debug(`Data fetched (filteredData): ${filteredData}`, 'DataChart', 'fetchData', 2);
             setDataPoints(prev => {
                 // Check if lastUpdated is in ascending order
                 const isAscending = filteredData.length > 1 &&
@@ -43,14 +43,15 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
 
                 // Log if data actually changed
                 if (JSON.stringify(prev) !== JSON.stringify(tempData)) {
-                    console.log("[DataChart] Updating chart data");
+                    Logger.debug("[DataChart] Updating chart data", 'DataChart', 'fetchData', 2);
                 } else {
-                    console.log("[DataChart] Data unchanged, no update");
+                    Logger.debug("[DataChart] Data unchanged, no update", 'DataChart', 'fetchData', 2);
                 }
                 return tempData;
             });
         } catch (error) {
             console.error("Error fetching scanned data:", error);
+            Logger.error(`Error fetching scanned data: ${error.message}`, 'DataChart', 'fetchData');
         }
     };
 
@@ -68,6 +69,7 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                 }
             } catch (error) {
                 console.error("Error checking scanner status:", error);
+                Logger.error(`Error checking scanner status: ${error.message}`, 'DataChart', 'checkScannerStatus');
             }
         };
 
@@ -90,6 +92,7 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                 await startScanner(thermostatIp, hostname, token, interval * 60000); // Convert minutes to ms
             } catch (error) {
                 console.error("Error starting scanner:", error);
+                Logger.error(`Error starting scanner: ${error.message}`, 'DataChart', 'handleToggleChange');
             }
         } else {
             try {
@@ -97,6 +100,7 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                 await stopScanner(thermostatIp, hostname, token);
             } catch (error) {
                 console.error("Error stopping scanner:", error);
+                Logger.error(`Error stopping scanner: ${error.message}`, 'DataChart', 'handleToggleChange');
             }
         }
     };
@@ -113,6 +117,7 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                 await startScanner(thermostatIp, hostname, token, validatedInterval * 60000); // Restart with new interval in ms
             } catch (error) {
                 console.error("Error updating scanner interval:", error);
+                Logger.error(`Error updating scanner interval: ${error.message}`, 'DataChart', 'handleIntervalChange');
             }
         }
     };
@@ -126,7 +131,7 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                 const scannedData = await fetchScannedData(thermostatIp, hostname, token);
                 // Compare latest scanned data with context data
                 if (isTokenExpired(token)) {
-                    console.error("Token expired. Please log in again.");
+                    Logger.error("Token expired. Please log in again.", 'DataChart', 'startRefreshTimer');
                     stopRefreshTimer();
                     return;
                 }
@@ -141,11 +146,13 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                         formattedTime: scannedData[0].time ? formatTime(scannedData[0].time) : "Loading...",
                         override: scannedData[0].override,
                         hold: scannedData[0].hold,
+                        outdoor_temp: scannedData[0].outdoor_temp,
+                        cloud_cover: scannedData[0].cloud_cover,
                         lastUpdated: Date.now(),
                     };
                     const contextData = thermostats[thermostatIp] || {};
                     // Shallow compare relevant fields (expand as needed)
-                    const fieldsToCheck = ["targetTemp", "currentTempMode", "currentFanMode", "currentTime", "formattedTime", "override", "hold"];
+                    const fieldsToCheck = ["targetTemp", "currentTempMode", "currentFanMode", "currentTime", "formattedTime", "override", "hold", "outdoor_temp", "cloud_cover"];
                     const hasDifference = fieldsToCheck.some(
                         key => latestScan[key] !== contextData[key]
                     );
@@ -159,6 +166,7 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                 }
             } catch (error) {
                 console.error("Error refreshing scanned data:", error);
+                Logger.error(`Error refreshing scanned data: ${error.message}`, 'DataChart', 'startRefreshTimer');
             }
         }, timerInterval);
         setRefreshTimer(timer);
@@ -239,6 +247,7 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
             }
         } catch (error) {
             console.error("Error exporting CSV:", error);
+            Logger.error(`Error exporting CSV: ${error.message}`, 'DataChart', 'exportToCSV');
             alert("Failed to export CSV.");
         }
     };
@@ -320,59 +329,69 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
             <Text style={subHeaderStyle}>Temperature (Current & Target)</Text>
             {dataPoints.length > 0 ? (
                 <View style={{ marginBottom: 20, flex: 1, backgroundColor: () => chartColors.backgroundColor }}>
-                  <LineChart
-                      data={{
-                          labels: displayLabels,
-                          datasets: [
-                              {
-                                  data: currentTemps,
-                                  color: () => chartColors.lineColorCurrentTemp,
-                                  label: "Current Temp"
-                              },
-                              {
-                                  data: targetTemps,
-                                  color: () => chartColors.lineColorTargetTemp,
-                                  label: "Target Temp"
-                              }
-                          ],
-                          legend: ["Current Temp", "Target Temp"]
-                      }}
-                      width={chartWidth}
-                      height={260} // Increase from 220 to 260 or more
-                      yAxisSuffix="°F"
-                      yAxisInterval={1}
-                      xAxisInterval={5}
-                      chartConfig={{
-                          backgroundColor: () => chartColors.backgroundColor,
-                          backgroundGradientFrom: () => chartColors.backgroundGradientFrom,
-                          backgroundGradientTo: () => chartColors.backgroundGradientTo,
-                          decimalPlaces: 1,
-                          color: () => chartColors.color,
-                          labelColor: () => chartColors.labelColor,
-                          style: { borderRadius: 16 },
-                          propsForDots: {
-                            r: "4",
+                    <LineChart
+                        data={{
+                            labels: displayLabels,
+                            datasets: [
+                                {
+                                    data: currentTemps,
+                                    color: () => chartColors.lineColorCurrentTemp,
+                                    label: "Current Temp",
+                                    withDots: false,  // Optional: hide dots for cleaner breaks
+                                },
+                                {
+                                    data: targetTemps,
+                                    color: () => chartColors.lineColorTargetTemp,
+                                    label: "Target Temp",
+                                    withDots: false,  // Optional: hide dots for cleaner breaks
+                                }
+                                /*
+                                {
+                                    data: outdoorTemps,
+                                    color: () => "#00FFFF", // Cyan for outdoor temp
+                                    label: "Outdoor Temp",
+                                    withDots: false,  // Optional: hide dots for cleaner breaks
+                                }*/
+                            ],
+                            legend: ["Current Temp", "Target Temp"] //, "Outdoor Temp"
+                        }}
+                        width={chartWidth}
+                        height={260} // Increase from 220 to 260 or more
+                        yAxisSuffix="°F"
+                        yAxisInterval={1}
+                        xAxisInterval={5}
+                        chartConfig={{
+                            backgroundColor: () => chartColors.backgroundColor,
+                            backgroundGradientFrom: () => chartColors.backgroundGradientFrom,
+                            backgroundGradientTo: () => chartColors.backgroundGradientTo,
+                            decimalPlaces: 1,
+                            color: () => chartColors.color,
+                            labelColor: () => chartColors.labelColor,
+                            style: { borderRadius: 16 },
+                            strokeWidth: 2,  // Make lines more visible
+                            propsForDots: {
+                            r: "3",     // Smaller dots
                             strokeWidth: "1",
                             stroke: "#ffa726",
-                          },
-                          propsForBackgroundLines: {
+                            },
+                            propsForBackgroundLines: {
                             strokeWidth: 1,  // Make lines thicker (> 1)
                             stroke: "#444444",  // Solid gray axis lines
                             strokeDasharray: "1, 10",  // Change dashed effect
-                          },
-                          propsForLabels: {
+                            },
+                            propsForLabels: {
                             fontFamily: "Roboto", // Or "Arial", "Helvetica Neue", etc.
                             fontWeight: "bold",   // Optional
                             fontSize: 11,         // Optional
                             zIndex: 1,
-                          },
-                      }}
-                      bezier
-                      yAxisMin={60} // Set minimum temperature
-                      yAxisMax={95} // Set maximum temperature
-                      verticalLabelRotation={-45} // <--- Add this line
-                      style={{ marginBottom: 20 }} // Add extra space below the chart
-                  />
+                            },
+                        }}
+                        bezier
+                        yAxisMin={60} // Set minimum temperature
+                        yAxisMax={95} // Set maximum temperature
+                        verticalLabelRotation={-45} // <--- Add this line
+                        style={{ marginBottom: 20 }} // Add extra space below the chart
+                    />
                 </View>
             ) : (
                 <Text>No data available.</Text>
@@ -389,12 +408,14 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                                 {
                                     data: acStates,
                                     color: () => chartColors.lineColorHVAC,
-                                    label: "HVAC State"
+                                    label: "HVAC State",
+                                    withDots: false,  // Optional: hide dots for cleaner breaks
                                 },
                                 {
                                     data: fanStates,
                                     color: () => chartColors.lineColorFan,
-                                    label: "Fan State"
+                                    label: "Fan State",
+                                    withDots: false,  // Optional: hide dots for cleaner breaks
                                 }
                             ],
                             legend: ["HVAC State", "Fan State"]

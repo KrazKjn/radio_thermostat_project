@@ -44,6 +44,8 @@ CREATE TABLE scan_data (
     fstate INTEGER,                    -- Fan state
     outdoor_temp REAL,                 -- Outdoor temperature
     cloud_cover REAL,                  -- Percentage Cloud Cover
+    rainAccumulation REALm             -- total rainfall over a period
+    rainIntensity REAL,                -- rate of rainfall
     FOREIGN KEY (thermostat_id) REFERENCES thermostats(id)
 );
 
@@ -51,7 +53,11 @@ CREATE INDEX idx_scan_data_thermostat ON scan_data(thermostat_id, timestamp);
 
 DROP VIEW IF EXISTS thermostat_readings;
 CREATE VIEW thermostat_readings AS
-SELECT sd.timestamp, t.uuid, t.ip, t.location, sd.temp, sd.tmode, sd.tTemp, sd.tstate, sd.fstate, sd.outdoor_temp, sd.cloud_cover
+SELECT sd.timestamp,
+    t.uuid, t.ip, t.location,
+    sd.temp, sd.tmode, sd.tTemp,
+    sd.tstate, sd.fstate, sd.outdoor_temp,
+    sd.cloud_cover, sd.rainAccumulation, sd.rainIntensity
 FROM scan_data sd
 JOIN thermostats t ON sd.thermostat_id = t.id
 
@@ -263,3 +269,76 @@ SELECT *,
 	strftime('%Y-%m-%d %I:%M %p', start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
 	strftime('%Y-%m-%d %I:%M %p', stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local
 FROM tstate_cycles
+
+DROP VIEW IF EXISTS view_tstate_daily_runtime;
+CREATE VIEW view_tstate_daily_runtime AS
+SELECT 
+  date(start_timestamp / 1000, 'unixepoch', 'localtime') as run_date,
+  SUM(run_time) AS total_runtime_hr
+FROM tstate_cycles
+GROUP BY run_date
+ORDER BY run_date;
+
+DROP VIEW IF EXISTS view_tstate_daily_mode_runtime;
+CREATE VIEW view_tstate_daily_mode_runtime AS
+SELECT 
+  date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+  tmode,
+  SUM(run_time) AS total_runtime_hr
+FROM tstate_cycles
+GROUP BY run_date, tmode
+ORDER BY run_date, tmode;
+
+DROP VIEW IF EXISTS view_tstate_hourly_runtime_today;
+CREATE VIEW view_tstate_hourly_runtime_today AS
+SELECT 
+  datetime(strftime('%Y-%m-%d %H:00', start_timestamp / 1000, 'unixepoch', 'localtime')) AS run_hour,
+  SUM(run_time) AS total_runtime_hr
+FROM tstate_cycles
+GROUP BY run_hour
+ORDER BY run_hour;
+
+DROP VIEW IF EXISTS view_tstate_hourly_env;
+
+CREATE VIEW view_tstate_hourly_env AS
+WITH hourly_env AS (
+  SELECT 
+    datetime(strftime('%Y-%m-%d %H:00', timestamp / 1000, 'unixepoch', 'localtime')) AS env_hour,
+    AVG(outdoor_temp) AS avg_outdoor_temp,
+    MIN(outdoor_temp) AS min_outdoor_temp,
+    MAX(outdoor_temp) AS max_outdoor_temp,
+    AVG(cloud_cover) AS avg_cloud_cover,
+    AVG(rainIntensity) AS avg_rain_intensity,
+    SUM(rainAccumulation) AS total_rain_accumulation,
+    COUNT(*) AS sample_count
+  FROM scan_data
+  GROUP BY env_hour
+)
+SELECT 
+  datetime(strftime('%Y-%m-%d %H:00', c.start_timestamp / 1000, 'unixepoch', 'localtime')) AS run_hour,
+  SUM(c.run_time) AS total_runtime_hr,
+  e.avg_outdoor_temp,
+  e.min_outdoor_temp,
+  e.max_outdoor_temp,
+  e.avg_cloud_cover,
+  e.avg_rain_intensity,
+  e.total_rain_accumulation,
+  e.sample_count
+FROM tstate_cycles c
+LEFT JOIN hourly_env e
+  ON datetime(strftime('%Y-%m-%d %H:00', c.start_timestamp / 1000, 'unixepoch', 'localtime')) = e.env_hour
+GROUP BY run_hour
+ORDER BY run_hour;
+
+DROP VIEW IF EXISTS view_fan_vs_hvac_daily;
+CREATE VIEW view_fan_vs_hvac_daily AS
+SELECT 
+  date(t.start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+  SUM(t.run_time) AS hvac_runtime_hr,
+  SUM(f.run_time) AS fan_runtime_hr
+FROM tstate_cycles t
+JOIN fstate_cycles f
+  ON date(t.start_timestamp / 1000, 'unixepoch', 'localtime') =
+     date(f.start_timestamp / 1000, 'unixepoch', 'localtime')
+GROUP BY run_date
+ORDER BY run_date;

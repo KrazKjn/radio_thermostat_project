@@ -4,6 +4,7 @@ const arp = require('node-arp');
 const snmp = require("net-snmp");
 const axios = require("axios");
 const Logger = require('../../components/Logger');
+const weatherService = require('../services/weatherService');
 const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
 
 // Cache object to store thermostat data by IP
@@ -100,6 +101,78 @@ const updateThermostatEnabled = (ip, enabled) => {
     }
 }
 
+const updateWeatherData = async () => {
+    try {
+        const weatherData = await weatherService.getWeatherData(process.env.WEATHER_LATITUDE, process.env.WEATHER_LONGITUDE);
+
+        // Navigate to minutely intervals
+        const intervals = weatherData.timelines?.minutely || [];
+
+        if (intervals.length === 0) {
+            Logger.info(`No minutely data found.`, 'thermostatService', 'updateWeatherData');
+            Logger.debug(`Full weather data: ${JSON.stringify(weatherData, null, 2)}`, 'thermostatService', 'updateWeatherData', 2);
+            return;
+        }
+
+        const entry = intervals[0]; // Only process the first item as that is the current value
+                                    // other values are future predictions
+        if (entry) {
+            const time = new Date(entry.time).toLocaleString();
+            const temperature = entry.values?.temperature ?? 'N/A';
+            const cloudCover = entry.values?.cloudCover ?? 'N/A';
+            const rainAccumulation = entry.values?.rainAccumulation ?? 'N/A';
+            const rainIntensity = entry.values?.rainIntensity ?? 'N/A';
+
+            if (temperature !== undefined && cloudCover !== undefined) {
+                const ts = new Date(entry.time);
+                const minuteKey = ts.toISOString().slice(0, 16); // e.g., "2025-09-17T15:42"
+
+                // Update the matching time if found
+                const stmt = db.prepare(`
+                    UPDATE scan_data
+                    SET outdoor_temp = ?, cloud_cover = ?, rainAccumulation = ?, rainIntensity = ?
+                    WHERE (outdoor_temp IS NULL OR
+                        cloud_cover IS NULL) AND
+                        strftime('%Y-%m-%dT%H:%M', timestamp / 1000, 'unixepoch') = ?
+                `);
+                try {
+                    const result = stmt.run(
+                        temperature,
+                        cloudCover,
+                        rainAccumulation,
+                        rainIntensity,
+                        minuteKey,
+                    );
+                    if (result.changes === 1) {
+                        Logger.debug(`Current Weather data saved: ${minuteKey} => temp: ${temperature}, cloud cover: ${cloudCover}`, 'thermostatService', 'updateWeatherData', 1);
+                    } else {
+                        // Update the latest entry with the lastest values
+                        const fallbackStmt = db.prepare(`
+                            UPDATE scan_data
+                            SET outdoor_temp = ?, cloud_cover = ?, rainAccumulation = ?, rainIntensity = ?
+                            WHERE (outdoor_temp IS NULL OR cloud_cover IS NULL)
+                            ORDER BY timestamp DESC
+                            LIMIT 1
+                        `);
+                        fallbackStmt.run(temperature, cloudCover, rainAccumulation, rainIntensity);
+                        Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}`, 'thermostatService', 'updateWeatherData', 1);
+                        return { temperature, cloudCover };
+                    }
+                }
+                catch (error) {
+                    console.error(`Thermostat update failed for ${minuteKey}:`, error.message);
+                    Logger.error(`Thermostat update failed for ${minuteKey}: ${error.message}`, 'thermostatService', 'updateWeatherData');
+                }
+            }
+        }
+    }
+    catch (error) {
+        console.log("Failed to update weather data.", error);
+        Logger.error(`Failed to update weather data: ${error.message}`, 'thermostatService', 'updateWeatherData');
+    }
+    return null;
+}
+
 async function scannerIntervalTask(ip) {
     try {
         const [ scanInterval, scanMode ] = getThermostatScanMode(ip);
@@ -140,6 +213,9 @@ async function scannerIntervalTask(ip) {
             );
 
             Logger.debug(`Saved DB data for ${ip}: ${JSON.stringify(data, null, 2)}`, 'thermostatService', 'scannerIntervalTask');
+
+            // Update weather data
+            const weatherData = await updateWeatherData();
         } else {
             const getThermostatDataStmt = db.prepare(`
                 SELECT * FROM scan_data WHERE thermostat_id = ? ORDER BY timestamp DESC LIMIT 1;

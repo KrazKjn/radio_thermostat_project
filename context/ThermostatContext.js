@@ -233,6 +233,8 @@ export const ThermostatProvider = ({ children }) => {
                     if (entry) {
                         updateObj.outdoor_temp = entry.values?.temperature ?? 'N/A';
                         updateObj.cloud_cover = entry.values?.cloudCover ?? 'N/A';
+                        updateObj.rainAccumulation = entry.values?.rainAccumulation ?? 'N/A';
+                        updateObj.rainIntensity = entry.values?.rainIntensity ?? 'N/A';
                     }
                 }
             }

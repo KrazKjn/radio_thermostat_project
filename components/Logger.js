@@ -14,7 +14,7 @@ try {
   console.warn('File logging disabled: fs or __dirname not available');
 }
 const LOG_MODE = process.env.LOG_MODE || 'screen'; // 'screen', 'file', or 'both'
-const LOG_DEBUG_LEVEL = process.env.LOG_DEBUG_LEVEL || 0;
+const LOG_DEBUG_LEVEL = process.env.LOG_DEBUG_LEVEL || 4; // 0=general, >= 1 => Depening level of debug verbosity
 
 const levels = {
   info: 'INFO',

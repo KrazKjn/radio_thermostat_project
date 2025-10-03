@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, ScrollView, Switch, TextInput, StyleSheet, Button, useWindowDimensions, Share, Platform } from "react-native";
+import { View, Text, ScrollView, Switch, TextInput, StyleSheet, Button, useWindowDimensions, Share, Platform, TouchableOpacity } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import * as FileSystem from 'expo-file-system'; // If using Expo, otherwise use react-native-fs or similar
 import * as Sharing from 'expo-sharing'; // For sharing the file
@@ -9,6 +9,11 @@ import { HostnameContext } from "../context/HostnameContext";
 import commonStyles from "../styles/commonStyles";
 import { HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO } from '../constants/hvac_mode'; // Import HVAC modes
 import DataRefreshContext from "../context/DataRefreshContext";
+import RuntimeTrendChart from './RuntimeTrendChart';
+import TempCorrelationChart from './TempCorrelationChart';
+import ModeBreakdownChart from './ModeBreakdownChart';
+import FanHVACEfficiencyChart from './FanHVACEfficiencyChart';
+import { getChartColors } from './chartTheme';
 
 const Logger = require('./Logger');
 
@@ -22,9 +27,11 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [interval, setIntervalValue] = useState(1); // Default interval: 1 minute
     const [refreshTimer, setRefreshTimer] = useState(null); // Timer for refreshing data
+    const [chartMode, setChartMode] = useState("live"); // New state for chart mode
     const refreshTimerRef = useRef(null);
     const { width: windowWidth } = useWindowDimensions();
     const chartWidth = Math.max( (parentComponent !== null ? parentComponent.innerWidth - 150 : windowWidth - 40), 320); // 40 for padding, min 320px
+    const chartColors = getChartColors(isDarkMode);
 
     // Fetch scanned data on component mount
     const fetchData = async () => {
@@ -266,34 +273,6 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
     const subHeaderStyle = parentComponent == null
         ? styles.subHeader
         : commonStyles.digitalLabel;
-
-    const chartColors = isDarkMode
-  ? {
-        //color: (opacity = 1) => `rgba(0,255,255,${opacity})`,      // cyan lines
-        //labelColor: (opacity = 1) => `rgba(255,255,255,${opacity})`, // white labels
-        color: "#FFFFFF",
-        labelColor: "#aaa",
-        backgroundColor: "transparent",
-        backgroundGradientFrom: "#0f0f0f",
-        backgroundGradientTo: "#ffffff",
-        lineColorCurrentTemp: "#0ff",
-        lineColorTargetTemp: "#FFA500",
-        lineColorHVAC:  "#0ff",
-        lineColorFan: "#FFA500"
-    }
-  : {
-        //color: (opacity = 1) => `rgba(0,0,0,${opacity})`,          // black lines
-        //labelColor: (opacity = 1) => `rgba(0,0,0,${opacity})`,     // black labels
-        color: "#222",
-        labelColor: "#aaa",
-        backgroundColor: "#222",
-        backgroundGradientFrom: "#222",
-        backgroundGradientTo: "#222",
-        lineColorCurrentTemp: "#FF0000",
-        lineColorTargetTemp: "#00FF00",
-        lineColorHVAC: "#0000FF",
-        lineColorFan: "#FFA500"
-    };
         
     return (
         <ScrollView style={styles.container}>
@@ -325,144 +304,195 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                 />
             </View>
 
-            {/* Chart */}
-            <Text style={subHeaderStyle}>Temperature (Current & Target)</Text>
-            {dataPoints.length > 0 ? (
-                <View style={{ marginBottom: 20, flex: 1, backgroundColor: () => chartColors.backgroundColor }}>
-                    <LineChart
-                        data={{
-                            labels: displayLabels,
-                            datasets: [
-                                {
-                                    data: currentTemps,
-                                    color: () => chartColors.lineColorCurrentTemp,
-                                    label: "Current Temp",
-                                    withDots: false,  // Optional: hide dots for cleaner breaks
-                                },
-                                {
-                                    data: targetTemps,
-                                    color: () => chartColors.lineColorTargetTemp,
-                                    label: "Target Temp",
-                                    withDots: false,  // Optional: hide dots for cleaner breaks
-                                }
-                                /*
-                                {
-                                    data: outdoorTemps,
-                                    color: () => "#00FFFF", // Cyan for outdoor temp
-                                    label: "Outdoor Temp",
-                                    withDots: false,  // Optional: hide dots for cleaner breaks
-                                }*/
-                            ],
-                            legend: ["Current Temp", "Target Temp"] //, "Outdoor Temp"
-                        }}
-                        width={chartWidth}
-                        height={260} // Increase from 220 to 260 or more
-                        yAxisSuffix="°F"
-                        yAxisInterval={1}
-                        xAxisInterval={5}
-                        chartConfig={{
-                            backgroundColor: () => chartColors.backgroundColor,
-                            backgroundGradientFrom: () => chartColors.backgroundGradientFrom,
-                            backgroundGradientTo: () => chartColors.backgroundGradientTo,
-                            decimalPlaces: 1,
-                            color: () => chartColors.color,
-                            labelColor: () => chartColors.labelColor,
-                            style: { borderRadius: 16 },
-                            strokeWidth: 2,  // Make lines more visible
-                            propsForDots: {
-                            r: "3",     // Smaller dots
-                            strokeWidth: "1",
-                            stroke: "#ffa726",
-                            },
-                            propsForBackgroundLines: {
-                            strokeWidth: 1,  // Make lines thicker (> 1)
-                            stroke: "#444444",  // Solid gray axis lines
-                            strokeDasharray: "1, 10",  // Change dashed effect
-                            },
-                            propsForLabels: {
-                            fontFamily: "Roboto", // Or "Arial", "Helvetica Neue", etc.
-                            fontWeight: "bold",   // Optional
-                            fontSize: 11,         // Optional
-                            zIndex: 1,
-                            },
-                        }}
-                        bezier
-                        yAxisMin={60} // Set minimum temperature
-                        yAxisMax={95} // Set maximum temperature
-                        verticalLabelRotation={-45} // <--- Add this line
-                        style={{ marginBottom: 20 }} // Add extra space below the chart
-                    />
-                </View>
-            ) : (
-                <Text>No data available.</Text>
+            {/* Tab Navigation */}
+            <View style={styles.tabContainer}>
+                <TouchableOpacity onPress={() => setChartMode("live")} style={[styles.tab, chartMode === 'live' && styles.activeTab]}>
+                    <Text style={[styles.tabText, chartMode === 'live' && styles.tabTextActive]}>Live</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setChartMode("runtime")} style={[styles.tab, chartMode === 'runtime' && styles.activeTab]}>
+                    <Text style={[styles.tabText, chartMode === 'runtime' && styles.tabTextActive]}>Runtime</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setChartMode("correlation")} style={[styles.tab, chartMode === 'correlation' && styles.activeTab]}>
+                    <Text style={[styles.tabText, chartMode === 'correlation' && styles.tabTextActive]}>Correlation</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setChartMode("mode")} style={[styles.tab, chartMode === 'mode' && styles.activeTab]}>
+                    <Text style={[styles.tabText, chartMode === 'mode' && styles.tabTextActive]}>Mode</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setChartMode("efficiency")} style={[styles.tab, chartMode === 'efficiency' && styles.activeTab]}>
+                    <Text style={[styles.tabText, chartMode === 'efficiency' && styles.tabTextActive]}>Efficiency</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Conditional Chart Rendering */}
+            {chartMode === "live" && (
+                <>
+                    {/* Chart */}
+                    <Text style={subHeaderStyle}>Temperature (Current & Target)</Text>
+                    {dataPoints.length > 0 ? (
+                        <View style={{ marginBottom: 20, flex: 1, backgroundColor: () => chartColors.backgroundColor }}>
+                            <LineChart
+                                data={{
+                                    labels: displayLabels,
+                                    datasets: [
+                                        {
+                                            data: currentTemps,
+                                            color: () => chartColors.lineColorCurrentTemp,
+                                            label: "Current Temp",
+                                            withDots: false,  // Optional: hide dots for cleaner breaks
+                                        },
+                                        {
+                                            data: targetTemps,
+                                            color: () => chartColors.lineColorTargetTemp,
+                                            label: "Target Temp",
+                                            withDots: false,  // Optional: hide dots for cleaner breaks
+                                        }
+                                        /*
+                                        {
+                                            data: outdoorTemps,
+                                            color: () => "#00FFFF", // Cyan for outdoor temp
+                                            label: "Outdoor Temp",
+                                            withDots: false,  // Optional: hide dots for cleaner breaks
+                                        }*/
+                                    ],
+                                    legend: ["Current Temp", "Target Temp"] //, "Outdoor Temp"
+                                }}
+                                width={chartWidth}
+                                height={260} // Increase from 220 to 260 or more
+                                yAxisSuffix="°F"
+                                yAxisInterval={1}
+                                xAxisInterval={5}
+                                chartConfig={{
+                                    backgroundColor: () => chartColors.backgroundColor,
+                                    backgroundGradientFrom: () => chartColors.backgroundGradientFrom,
+                                    backgroundGradientTo: () => chartColors.backgroundGradientTo,
+                                    decimalPlaces: 1,
+                                    color: () => chartColors.color,
+                                    labelColor: () => chartColors.labelColor,
+                                    style: { borderRadius: 16 },
+                                    strokeWidth: 2,  // Make lines more visible
+                                    propsForDots: {
+                                    r: "3",     // Smaller dots
+                                    strokeWidth: "1",
+                                    stroke: "#ffa726",
+                                    },
+                                    propsForBackgroundLines: {
+                                    strokeWidth: 1,  // Make lines thicker (> 1)
+                                    stroke: "#444444",  // Solid gray axis lines
+                                    strokeDasharray: "1, 10",  // Change dashed effect
+                                    },
+                                    propsForLabels: {
+                                    fontFamily: "Roboto", // Or "Arial", "Helvetica Neue", etc.
+                                    fontWeight: "bold",   // Optional
+                                    fontSize: 11,         // Optional
+                                    zIndex: 1,
+                                    },
+                                }}
+                                bezier
+                                yAxisMin={60} // Set minimum temperature
+                                yAxisMax={95} // Set maximum temperature
+                                verticalLabelRotation={-45} // <--- Add this line
+                                style={{ marginBottom: 20 }} // Add extra space below the chart
+                            />
+                        </View>
+                    ) : (
+                        <Text style={subHeaderStyle}>No data available.</Text>
+                    )}
+
+                    {/* HVAC & Fan State Chart */}
+                    <Text style={subHeaderStyle}>HVAC & Fan State</Text>
+                    {dataPoints.length > 0 ? (
+                        <View style={{ marginBottom: 20, flex: 1, backgroundColor: () => chartColors.backgroundColor }}>
+                            <LineChart
+                                data={{
+                                    labels: displayLabels,
+                                    datasets: [
+                                        {
+                                            data: acStates,
+                                            color: () => chartColors.lineColorHVAC,
+                                            label: "HVAC State",
+                                            withDots: false,  // Optional: hide dots for cleaner breaks
+                                        },
+                                        {
+                                            data: fanStates,
+                                            color: () => chartColors.lineColorFan,
+                                            label: "Fan State",
+                                            withDots: false,  // Optional: hide dots for cleaner breaks
+                                        }
+                                    ],
+                                    legend: ["HVAC State", "Fan State"]
+                                }}
+                                width={chartWidth}
+                                height={260}
+                                yAxisSuffix=""
+                                yAxisInterval={1}
+                                xAxisInterval={5}
+                                chartConfig={{
+                                    backgroundColor: () => chartColors.backgroundColor,
+                                    backgroundGradientFrom: () => chartColors.backgroundGradientFrom,
+                                    backgroundGradientTo: () => chartColors.backgroundGradientTo,
+                                    decimalPlaces: 1,
+                                    color: () => chartColors.color,
+                                    labelColor: () => chartColors.labelColor,
+                                    style: { borderRadius: 16 },
+                                    propsForDots: {
+                                        r: "4",
+                                        strokeWidth: "2",
+                                        stroke: "#ffa726",
+                                    },
+                                    propsForBackgroundLines: {
+                                        strokeWidth: 1,  // Make lines thicker (> 1)
+                                        stroke: "#444444",  // Solid gray axis lines
+                                        strokeDasharray: "1, 10",  // Change dashed effect
+                                    },
+                                    propsForLabels: {
+                                        fontFamily: "Roboto", // Or "Arial", "Helvetica Neue", etc.
+                                        fontWeight: "bold",   // Optional
+                                        fontSize: 11,         // Optional
+                                        zIndex: 1,
+                                    },
+                                }}
+                                fromZero
+                                yAxisMin={0}
+                                yAxisMax={1} // Set max to 1 for binary state representation
+                                verticalLabelRotation={-45} // <--- Add this line
+                                style={{ marginBottom: 20 }} // Add extra space below the chart
+                            />
+                        </View>
+                    ) : (
+                        <Text style={subHeaderStyle}>No data available.</Text>
+                    )}
+                </>
             )}
 
-            {/* HVAC & Fan State Chart */}
-            <Text style={subHeaderStyle}>HVAC & Fan State</Text>
-            {dataPoints.length > 0 ? (
-                <View style={{ marginBottom: 20, flex: 1, backgroundColor: () => chartColors.backgroundColor }}>
-                    <LineChart
-                        data={{
-                            labels: displayLabels,
-                            datasets: [
-                                {
-                                    data: acStates,
-                                    color: () => chartColors.lineColorHVAC,
-                                    label: "HVAC State",
-                                    withDots: false,  // Optional: hide dots for cleaner breaks
-                                },
-                                {
-                                    data: fanStates,
-                                    color: () => chartColors.lineColorFan,
-                                    label: "Fan State",
-                                    withDots: false,  // Optional: hide dots for cleaner breaks
-                                }
-                            ],
-                            legend: ["HVAC State", "Fan State"]
-                        }}
-                        width={chartWidth}
-                        height={260}
-                        yAxisSuffix=""
-                        yAxisInterval={1}
-                        xAxisInterval={5}
-                        chartConfig={{
-                            backgroundColor: () => chartColors.backgroundColor,
-                            backgroundGradientFrom: () => chartColors.backgroundGradientFrom,
-                            backgroundGradientTo: () => chartColors.backgroundGradientTo,
-                            decimalPlaces: 1,
-                            color: () => chartColors.color,
-                            labelColor: () => chartColors.labelColor,
-                            style: { borderRadius: 16 },
-                            propsForDots: {
-                                r: "4",
-                                strokeWidth: "2",
-                                stroke: "#ffa726",
-                            },
-                            propsForBackgroundLines: {
-                                strokeWidth: 1,  // Make lines thicker (> 1)
-                                stroke: "#444444",  // Solid gray axis lines
-                                strokeDasharray: "1, 10",  // Change dashed effect
-                            },
-                            propsForLabels: {
-                                fontFamily: "Roboto", // Or "Arial", "Helvetica Neue", etc.
-                                fontWeight: "bold",   // Optional
-                                fontSize: 11,         // Optional
-                                zIndex: 1,
-                            },
-                        }}
-                        fromZero
-                        yAxisMin={0}
-                        yAxisMax={1} // Set max to 1 for binary state representation
-                        verticalLabelRotation={-45} // <--- Add this line
-                        style={{ marginBottom: 20 }} // Add extra space below the chart
-                    />
-                </View>
-            ) : (
-                <Text>No data available.</Text>
+            {chartMode === "runtime" && (
+                <>
+                    <Text style={subHeaderStyle}>Runtime Trends</Text>
+                    <RuntimeTrendChart thermostatIp={thermostatIp} isDarkMode={isDarkMode} parentComponent={parentComponent} />
+                </>
+            )}
+            {chartMode === "correlation" && (
+                <>
+                    <Text style={subHeaderStyle}>Temperature Correlation</Text>
+                    <TempCorrelationChart thermostatIp={thermostatIp} isDarkMode={isDarkMode} parentComponent={parentComponent} />
+                </>
+            )}
+
+            {chartMode === "mode" && (
+                <>
+                    <Text style={subHeaderStyle}>Mode</Text>
+                    <ModeBreakdownChart thermostatIp={thermostatIp} isDarkMode={isDarkMode} parentComponent={parentComponent} />
+                </>
+            )}
+
+            {chartMode === "efficiency" && (
+                <>
+                    <Text style={subHeaderStyle}>Efficiency</Text>
+                    <FanHVACEfficiencyChart thermostatIp={thermostatIp} isDarkMode={isDarkMode} parentComponent={parentComponent} />
+                </>
             )}
 
             {/* Export Button */}
-            {parentComponent !== null && <View style={{ marginBottom: 10 }}>
+            {parentComponent !== null && <View style={{ marginBottom: 10, marginTop: 20 }}>
                 <Button title="Export Cached Data to CSV" onPress={exportToCSV} />
             </View>}
         </ScrollView>
@@ -483,6 +513,28 @@ const styles = StyleSheet.create({
         textAlign: "center",
         borderRadius: 5,
     },
+    tabContainer: {
+        flexDirection: 'row',
+        marginBottom: 10,
+    },
+    tab: {
+        paddingVertical: 10,
+        paddingHorizontal: 15,
+        borderWidth: 1,
+        borderColor: '#ccc',
+        borderRadius: 5,
+        marginRight: 10,
+    },
+    activeTab: {
+        backgroundColor: '#007BFF',
+        borderColor: '#007BFF',
+    },
+    tabText: {
+        color: '#fff',
+    },
+    tabTextActive: {
+        color: '#333',
+        fontWeight: 'bold',},
 });
 
 export default DataChart;

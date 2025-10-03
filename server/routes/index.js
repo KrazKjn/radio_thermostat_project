@@ -51,6 +51,14 @@ router.post("/scanner/restart/:ip", authWithRefresh, thermostatController.restar
 // Usage
 router.get("/usage/daily/:ip", authWithRefresh, thermostatController.getDailyUsage);
 
+// Statistics
+router.get("/stats/daily-runtime/:ip", authWithRefresh, thermostatController.getDailyRuntime);
+router.get("/stats/hourly-runtime/:ip", authWithRefresh, thermostatController.getHourlyRuntime);
+router.get("/stats/daily-mode-runtime/:ip", authWithRefresh, thermostatController.getDailyModeRuntime);
+router.get("/stats/hourly-env/:ip", authWithRefresh, thermostatController.getHourlyEnv);
+router.get("/stats/fan-vs-hvac-daily/:ip", authWithRefresh, thermostatController.getFanVsHvacDaily);
+router.get("/stats/temp-vs-runtime/:ip", authWithRefresh, thermostatController.getTempVsRuntime);
+
 // Thermostats
 router.get("/thermostats", authWithRefresh, thermostatController.getThermostats);
 router.post("/thermostats", authWithRefresh, thermostatController.addThermostat);

@@ -144,7 +144,7 @@ const updateWeatherData = async () => {
                         minuteKey,
                     );
                     if (result.changes === 1) {
-                        Logger.debug(`Current Weather data saved: ${minuteKey} => temp: ${temperature}, cloud cover: ${cloudCover}`, 'thermostatService', 'updateWeatherData', 1);
+                        Logger.debug(`Current Weather data saved: ${minuteKey} => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}`, 'thermostatService', 'updateWeatherData', 1);
                     } else {
                         // Update the latest entry with the lastest values
                         const fallbackStmt = db.prepare(`
@@ -155,7 +155,7 @@ const updateWeatherData = async () => {
                             LIMIT 1
                         `);
                         fallbackStmt.run(temperature, cloudCover, rainAccumulation, rainIntensity);
-                        Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}`, 'thermostatService', 'updateWeatherData', 1);
+                        Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}`, 'thermostatService', 'updateWeatherData', 1);
                         return { temperature, cloudCover };
                     }
                 }

@@ -39,6 +39,10 @@ router.post("/tswing/:ip", authWithRefresh, thermostatController.updateSwing);
 router.post("/schedule/:scheduleMode/:ip", authWithRefresh, thermostatController.updateSchedule);
 router.post("/schedule/:scheduleMode/:day/:ip", authWithRefresh, thermostatController.updateScheduleDay);
 router.post("/cloud/:ip", authWithRefresh, thermostatController.updateCloud);
+// Get daily cycle counts by thermostat IP
+router.get('/thermostat/:ip/daily-cycles', authWithRefresh, thermostatController.getDailyCycles);
+// Get hourly cycle counts and runtime by thermostat IP
+router.get('/thermostat/:ip/hourly-cycles', authWithRefresh, thermostatController.getHourlyCycles);
 
 // Scanner
 router.post("/scanner/start/:ip", authWithRefresh, thermostatController.startScanner);
@@ -50,6 +54,14 @@ router.post("/scanner/restart/:ip", authWithRefresh, thermostatController.restar
 
 // Usage
 router.get("/usage/daily/:ip", authWithRefresh, thermostatController.getDailyUsage);
+
+// Statistics
+router.get("/stats/daily-runtime/:ip", authWithRefresh, thermostatController.getDailyRuntime);
+router.get("/stats/hourly-runtime/:ip", authWithRefresh, thermostatController.getHourlyRuntime);
+router.get("/stats/daily-mode-runtime/:ip", authWithRefresh, thermostatController.getDailyModeRuntime);
+router.get("/stats/hourly-env/:ip", authWithRefresh, thermostatController.getHourlyEnv);
+router.get("/stats/fan-vs-hvac-daily/:ip", authWithRefresh, thermostatController.getFanVsHvacDaily);
+router.get("/stats/temp-vs-runtime/:ip", authWithRefresh, thermostatController.getTempVsRuntime);
 
 // Thermostats
 router.get("/thermostats", authWithRefresh, thermostatController.getThermostats);

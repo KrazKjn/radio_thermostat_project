@@ -14,5 +14,10 @@ module.exports = async function (env, argv) {
     ],
   });
 
+  config.resolve.alias = { 'd3-time': require.resolve('d3-time/index.js'),
+      'd3-time-format': require.resolve('d3-time-format/src/index.js'),
+      ...config.resolve.alias
+  };
+
   return config;
 };

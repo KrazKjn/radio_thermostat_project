@@ -15,6 +15,9 @@ const DEFAULT_SCAN_INTERVAL = 60000; // Scan every 15 seconds
 const scanners = {}; // Store active scanners by IP
 const daysOfWeek = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
+let lastSegmentUpdate = 0;
+const SEGMENT_INTERVAL_MS = 60000; // 1 minute or whatever cadence you prefer
+
 const getThermostatData = async (req, res) => {
     try {
         Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostatData');
@@ -678,7 +681,7 @@ const getDailyUsage = (req, res) => {
 
 const getThermostats = (req, res) => {
     const rows = db.prepare(`
-        SELECT * FROM thermostats
+        SELECT * FROM view_hvac_systems
     `).all();
 
     Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostats'); // Log the request body
@@ -791,7 +794,7 @@ const updateWeatherData = async () => {
                         minuteKey,
                     );
                     if (result.changes === 1) {
-                        Logger.debug(`Current Weather data saved: ${minuteKey} => temp: ${temperature}, cloud cover: ${cloudCover}`, 'thermostatController', 'updateWeatherData', 1);
+                        Logger.debug(`Current Weather data saved: ${minuteKey} => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}`, 'thermostatController', 'updateWeatherData', 1);
                     } else {
                         // Update the latest entry with the lastest values
                         const fallbackStmt = db.prepare(`
@@ -802,7 +805,7 @@ const updateWeatherData = async () => {
                             LIMIT 1
                         `);
                         fallbackStmt.run(temperature, cloudCover, rainAccumulation, rainIntensity);
-                        Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}`, 'thermostatController', 'updateWeatherData', 1);
+                        Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}`, 'thermostatController', 'updateWeatherData', 1);
                         return { temperature, cloudCover };
                     }
                 }
@@ -819,6 +822,83 @@ const updateWeatherData = async () => {
     }
     return null;
 }
+
+const segmentCycleByHour = async (cycle) => {
+    const segments = [];
+    const { thermostat_id, id: cycle_id, start_timestamp, stop_timestamp } = cycle;
+    const end = stop_timestamp;
+    let current = start_timestamp;
+
+    while (current < end) {
+        const hourStart = new Date(current);
+        hourStart.setMinutes(0, 0, 0);
+        const hourEnd = hourStart.getTime() + 3600000;
+
+        const actual_end = Math.min(end, hourEnd);
+        const duration_ms = actual_end - current;
+
+        segments.push({
+            thermostat_id,
+            cycle_id,
+            actual_start: current,
+            actual_end,
+            duration_ms,
+            segment_hour: new Date(hourStart).toISOString().slice(0, 19).replace('T', ' ')
+        });
+
+        current = actual_end;
+    }
+
+    return segments;
+};
+
+const processCycleQueue = async () => {
+    const now = Date.now();
+    if (now - lastSegmentUpdate > SEGMENT_INTERVAL_MS) {
+        lastSegmentUpdate = now;
+
+        try {
+            const unsegmentedCycles = db.prepare(`
+                SELECT * FROM tstate_cycles
+                WHERE stop_timestamp IS NOT NULL
+                AND id NOT IN (SELECT cycle_id FROM cycle_segments)
+            `).all();
+
+            const insertSegmentStmt = db.prepare(`
+                INSERT INTO cycle_segments (
+                    thermostat_id,
+                    cycle_id,
+                    actual_start,
+                    actual_end,
+                    duration_ms,
+                    segment_hour
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            `);
+
+            const insertSegments = db.transaction((segments) => {
+                for (const seg of segments) {
+                    insertSegmentStmt.run(
+                        seg.thermostat_id,
+                        seg.cycle_id,
+                        seg.actual_start,
+                        seg.actual_end,
+                        seg.duration_ms,
+                        seg.segment_hour
+                    );
+                }
+            });
+
+            for (const cycle of unsegmentedCycles) {
+                const segments = await segmentCycleByHour(cycle);
+                insertSegments(segments);
+            }
+
+            Logger.info(`Segmented ${unsegmentedCycles.length} completed cycles`, 'ThermostatController', 'captureStatIn');
+        } catch (err) {
+            Logger.error(`Error segmenting cycles: ${err.message}`, 'ThermostatController', 'captureStatIn');
+        }
+    }
+};
 
 const captureStatIn = async (req, res) => {
     const ip = (req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress).replace(/^::ffff:/, '');
@@ -971,6 +1051,7 @@ const captureStatIn = async (req, res) => {
                 cache[ip].rainAccumulation = weatherData ? weatherData.rainAccumulation : null;
                 cache[ip].rainIntensity = weatherData ? weatherData.rainIntensity : null;
 
+                await processCycleQueue();
             } catch (error) {
                 console.error(`Error saving Thermostat data for ${location}:`, error);
                 Logger.error(`Error saving Thermostat data for ${location}: ${error}`, 'ThermostatController', 'captureStatIn');
@@ -1022,6 +1103,284 @@ const captureStatIn = async (req, res) => {
     }
 };
 
+const getDailyRuntime = (req, res) => {
+    try {
+        const { ip } = req.params;
+        const { days } = req.query;
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        if (!thermostat) {
+            return res.status(404).json({ error: "Thermostat not found" });
+        }
+        const limitClause = (days && Number(days) > 0) ? `LIMIT ?` : ``;
+        const query = `
+            SELECT 
+              date(start_timestamp / 1000, 'unixepoch', 'localtime') as run_date,
+              SUM(run_time) AS total_runtime_hr
+            FROM tstate_cycles
+            WHERE thermostat_id = ?
+            GROUP BY run_date
+            ORDER BY run_date DESC
+            ${limitClause};
+        `;
+
+        const rows = (limitClause)
+            ? db.prepare(query).all(thermostat.id, Number(days))
+            : db.prepare(query).all(thermostat.id);
+
+        res.json(rows.reverse());
+    } catch (error) {
+        Logger.error(`Error in getDailyRuntime: ${error.message}`, 'ThermostatController', 'getDailyRuntime');
+        res.status(500).json({ error: 'Failed to retrieve daily runtime data' });
+    }
+};
+
+const getDailyModeRuntime = (req, res) => {
+    try {
+        const { ip } = req.params;
+        const { days } = req.query;
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        if (!thermostat) {
+            return res.status(404).json({ error: "Thermostat not found" });
+        }
+        const limitClause = (days && Number(days) > 0) ? `LIMIT ?` : ``;
+        const query =`
+            SELECT 
+              date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+              tmode,
+              SUM(run_time) AS total_runtime_hr
+            FROM tstate_cycles
+            WHERE thermostat_id = ?
+            GROUP BY run_date, tmode
+            ORDER BY run_date DESC, tmode
+            ${limitClause};
+        `;
+
+        const rows = (limitClause)
+            ? db.prepare(query).all(thermostat.id, Number(days))
+            : db.prepare(query).all(thermostat.id);
+
+        res.json(rows.reverse());
+    } catch (error) {
+        Logger.error(`Error: ${error.message}`, 'ThermostatController', 'getDailyModeRuntime');
+        res.status(500).json({ error: 'Failed to retrieve daily mode runtime data' });
+    }
+};
+
+const getHourlyRuntime = (req, res) => {
+    try {
+        const { ip } = req.params;
+        const { hours } = req.query;
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        if (!thermostat) {
+            return res.status(404).json({ error: "Thermostat not found" });
+        }
+        const limitClause = (hours && Number(hours) > 0) ? `LIMIT ?` : ``;
+        const query = `
+            SELECT segment_hour, total_runtime_minutes
+            FROM view_cycle_hourly_runtime
+            WHERE thermostat_id = ?
+            ORDER BY segment_hour DESC
+            ${limitClause};
+        `;
+    
+        const rows = (limitClause)
+            ? db.prepare(query).all(thermostat.id, Number(hours))
+            : db.prepare(query).all(thermostat.id);
+
+        const now = new Date();
+        const expectedHours = [];
+
+        for (let i = Number(hours) - 1; i >= 0; i--) {
+            const dt = new Date(now.getTime() - i * 3600000);
+            dt.setMinutes(0, 0, 0); // Round to start of hour
+            const formatted = dt.toISOString().slice(0, 19).replace('T', ' ');
+            expectedHours.push(formatted);
+        }
+
+        const actualMap = new Map();
+        rows.forEach(row => {
+            actualMap.set(row.segment_hour, row.total_runtime_minutes);
+        });
+
+        const filledRows = expectedHours.map(hour => ({
+            segment_hour: hour,
+            total_runtime_minutes: actualMap.get(hour) || 0
+        }));
+
+        res.json(filledRows);
+    } catch (error) {
+        Logger.error(`Error: ${error.message}`, 'ThermostatController', 'getHourlyRuntime');
+        res.status(500).json({ error: 'Failed to retrieve hourly environment data' });
+    }
+};
+
+const getHourlyEnv = (req, res) => {
+    try {
+        const { ip } = req.params;
+        const { hours } = req.query;
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        if (!thermostat) {
+            return res.status(404).json({ error: "Thermostat not found" });
+        }
+        const limitClause = (hours && Number(hours) > 0) ? `LIMIT ?` : ``;
+        const query = `
+            WITH hourly_env AS (
+              SELECT 
+                datetime(strftime('%Y-%m-%d %H:00', timestamp / 1000, 'unixepoch', 'localtime')) AS env_hour,
+                AVG(outdoor_temp) AS avg_outdoor_temp,
+                MIN(outdoor_temp) AS min_outdoor_temp,
+                MAX(outdoor_temp) AS max_outdoor_temp,
+                AVG(cloud_cover) AS avg_cloud_cover,
+                AVG(rainIntensity) AS avg_rain_intensity,
+                SUM(rainAccumulation) AS total_rain_accumulation,
+                COUNT(*) AS sample_count
+              FROM scan_data
+              WHERE thermostat_id = ?
+              GROUP BY env_hour
+            )
+            SELECT 
+              datetime(strftime('%Y-%m-%d %H:00', c.start_timestamp / 1000, 'unixepoch', 'localtime')) AS run_hour,
+              SUM(c.run_time) AS total_runtime_hr,
+              e.avg_outdoor_temp,
+              e.min_outdoor_temp,
+              e.max_outdoor_temp,
+              e.avg_cloud_cover,
+              e.avg_rain_intensity,
+              e.total_rain_accumulation,
+              e.sample_count
+            FROM tstate_cycles c
+            LEFT JOIN hourly_env e
+              ON datetime(strftime('%Y-%m-%d %H:00', c.start_timestamp / 1000, 'unixepoch', 'localtime')) = e.env_hour
+            WHERE c.thermostat_id = ?
+            GROUP BY run_hour
+            ORDER BY run_hour DESC
+            ${limitClause};
+        `;
+    
+        const rows = (limitClause)
+            ? db.prepare(query).all(thermostat.id, thermostat.id, Number(hours))
+            : db.prepare(query).all(thermostat.id, thermostat.id);
+
+        res.json(rows.reverse());
+    } catch (error) {
+        Logger.error(`Error in getHourlyEnv: ${error.message}`, 'ThermostatController', 'getHourlyEnv');
+        res.status(500).json({ error: 'Failed to retrieve hourly environment data' });
+    }
+};
+
+const getFanVsHvacDaily = (req, res) => {
+    try {
+        const { ip } = req.params;
+        const { days } = req.query;
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        if (!thermostat) {
+            return res.status(404).json({ error: "Thermostat not found" });
+        }
+        const limitClause = (days && Number(days) > 0) ? `LIMIT ?` : ``;
+        const query = `
+            SELECT 
+              date(t.start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+              SUM(t.run_time) AS hvac_runtime_hr,
+              SUM(f.run_time) AS fan_runtime_hr
+            FROM tstate_cycles t
+            JOIN fstate_cycles f
+              ON date(t.start_timestamp / 1000, 'unixepoch', 'localtime') =
+                 date(f.start_timestamp / 1000, 'unixepoch', 'localtime')
+            WHERE t.thermostat_id = ? AND f.thermostat_id = ?
+            GROUP BY run_date
+            ORDER BY run_date DESC
+            ${limitClause};
+        `;
+    
+        const rows = (limitClause)
+            ? db.prepare(query).all(thermostat.id, thermostat.id, Number(days))
+            : db.prepare(query).all(thermostat.id, thermostat.id);
+
+        res.json(rows.reverse());
+    } catch (error) {
+        Logger.error(`Error in getFanVsHvacDaily: ${error.message}`, 'ThermostatController', 'getFanVsHvacDaily');
+        res.status(500).json({ error: 'Failed to retrieve fan vs hvac daily data' });
+    }
+};
+
+const getTempVsRuntime = (req, res) => {
+    try {
+        const { ip } = req.params;
+        const rows = db.prepare(`
+            SELECT * FROM thermostat_runtime_vs_target WHERE day >= '2025-09-01' AND compressor_minutes < 721 AND ip = ?
+        `).all(ip);
+        res.json(rows);
+    } catch (error) {
+        Logger.error(`Error in getTempVsRuntime: ${error.message}`, 'ThermostatController', 'getTempVsRuntime');
+        res.status(500).json({ error: 'Failed to retrieve temp vs runtime data' });
+    }
+};
+
+const getDailyCycles = (req, res) => {
+    try {
+        const { ip } = req.params;
+        const { days } = req.query;
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        if (!thermostat) {
+            return res.status(404).json({ error: "Thermostat not found" });
+        }
+        const limitClause = (days && Number(days) > 0) ? `LIMIT ?` : ``;
+        const query = `
+            SELECT
+              date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+              COUNT(*) AS cycle_count,
+              SUM(run_time) AS total_runtime_minutes
+            FROM tstate_cycles
+            WHERE thermostat_id = ?
+            GROUP BY run_date
+            ORDER BY run_date DESC
+            ${limitClause};
+        `;
+
+        const rows = (limitClause)
+            ? db.prepare(query).all(thermostat.id, Number(days))
+            : db.prepare(query).all(thermostat.id);
+
+        res.json(rows.reverse());
+    } catch (error) {
+        Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
+        res.status(500).json({ error: 'Failed to retrieve daily cycles data' });
+    }
+};
+
+const getHourlyCycles = (req, res) => {
+    try {
+        const { ip } = req.params;
+        const { hours } = req.query;
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        if (!thermostat) {
+            return res.status(404).json({ error: "Thermostat not found" });
+        }
+        const limitClause = (hours && Number(hours) > 0) ? `LIMIT ?` : ``;
+        const query = `
+            SELECT
+                date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+                strftime('%H', start_timestamp / 1000, 'unixepoch', 'localtime') AS hour,
+                COUNT(*) AS cycle_count,
+                SUM((stop_timestamp - start_timestamp) / 60000.0) AS total_runtime_minutes
+            FROM tstate_cycles
+            WHERE thermostat_id = ? AND stop_timestamp IS NOT NULL
+            GROUP BY run_date, hour
+            ORDER BY run_date, hour DESC
+            ${limitClause};
+        `;
+
+        const rows = (limitClause)
+            ? db.prepare(query).all(thermostat.id, Number(hours))
+            : db.prepare(query).all(thermostat.id);
+
+        res.json(rows.reverse());
+    } catch (error) {
+        Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
+        res.status(500).json({ error: 'Failed to retrieve daily cycles data' });
+    }
+};
+
 module.exports = {
     getThermostatData,
     updateThermostat,
@@ -1052,4 +1411,12 @@ module.exports = {
     deleteThermostat,
     scanThermostats,
     captureStatIn,
+    getDailyRuntime,
+    getHourlyRuntime,
+    getDailyModeRuntime,
+    getHourlyEnv,
+    getFanVsHvacDaily,
+    getTempVsRuntime,
+    getDailyCycles,
+    getHourlyCycles,
 };

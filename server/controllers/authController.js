@@ -71,7 +71,7 @@ const login = async (req, res) => {
       Logger.info(`Created new session token expiring at ${new Date(expiresAt * 1000).toString()}`, 'AuthController', 'login');
     }
 
-    res.json({ token, user: { username: user.username, role: user.role } });
+    res.status(200).json({ token, user: { username: user.username, role: user.role } });
 };
 
 const logout = (req, res) => {
@@ -90,7 +90,7 @@ const logout = (req, res) => {
 
     if (token) {
         db.prepare('DELETE FROM user_sessions WHERE sessionToken = ?').run(token);
-        res.json({ message: "Logged out" });
+        res.status(200).json({ message: "Logged out" });
     } else {
         res.status(400).json({ error: "No token provided for logout" });
     }
@@ -132,7 +132,7 @@ const tokenInfo = (req, res) => {
       } else {
         Logger.debug(`Service token ...`, 'AuthController', 'tokenInfo', 2);
       }
-      res.json({
+      res.status(200).json({
         username: decoded.username,
         role: decoded.role,
         exp: decoded.exp,

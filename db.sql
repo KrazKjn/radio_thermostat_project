@@ -1,5 +1,5 @@
 -- HVAC Thermostats
-CREATE TABLE thermostats (
+CREATE TABLE IF NOT EXISTS thermostats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uuid TEXT UNIQUE NOT NULL,       -- Unique identifier (MAC/IP/Custom ID)
     ip TEXT UNIQUE,                  -- Optional: Store IP separately
@@ -15,7 +15,7 @@ CREATE TABLE thermostats (
 CREATE INDEX idx_thermostats_uuid ON thermostats(uuid);
 
 -- Create users table
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     username TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
@@ -33,7 +33,7 @@ CREATE INDEX idx_users_username ON users(username);
 --('3', 'user2', 'user2@example.com', '<hashed_password>', 'user');
 
 -- HVAC Scan Data
-CREATE TABLE scan_data (
+CREATE TABLE IF NOT EXISTS scan_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     thermostat_id INTEGER NOT NULL,    -- Reference thermostats table
     timestamp INTEGER NOT NULL,        -- Unix timestamp (milliseconds)
@@ -62,7 +62,7 @@ FROM scan_data sd
 JOIN thermostats t ON sd.thermostat_id = t.id
 
 -- HVAC Events
-CREATE TABLE hvac_events (
+CREATE TABLE IF NOT EXISTS hvac_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     thermostat_id INTEGER NOT NULL,
     event_time INTEGER NOT NULL,  -- Unix timestamp (milliseconds)
@@ -78,7 +78,7 @@ CREATE TABLE hvac_events (
 );
 
 -- Thermostat State Cycles
-CREATE TABLE tstate_cycles (
+CREATE TABLE IF NOT EXISTS tstate_cycles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     thermostat_id INTEGER NOT NULL,
     tmode INTEGER,
@@ -90,7 +90,7 @@ CREATE TABLE tstate_cycles (
 )
 
 -- Fan State Cycles
-CREATE TABLE fstate_cycles (
+CREATE TABLE IF NOT EXISTS fstate_cycles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     thermostat_id INTEGER NOT NULL,
     tmode INTEGER,
@@ -130,6 +130,7 @@ BEGIN
         OR (SELECT fstate FROM scan_data WHERE thermostat_id = NEW.thermostat_id ORDER BY timestamp DESC LIMIT 1 OFFSET 1) != NEW.fstate;
 END;
 
+DROP VIEW IF EXISTS hvac_summary;
 CREATE VIEW hvac_summary AS
 SELECT h.event_time, t.uuid, t.ip, t.location,
        h.prev_temp, h.new_temp,
@@ -139,6 +140,7 @@ SELECT h.event_time, t.uuid, t.ip, t.location,
 FROM hvac_events h
 JOIN thermostats t ON h.thermostat_id = t.id;
 
+DROP VIEW IF EXISTS thermostat_daily_runtime;
 CREATE VIEW thermostat_daily_runtime AS
 WITH readings_with_next AS (
   SELECT
@@ -160,6 +162,7 @@ FROM readings_with_next
 WHERE next_ts IS NOT NULL
 GROUP BY day, ip;
 
+DROP VIEW IF EXISTS thermostat_runtime_vs_target;
 CREATE VIEW thermostat_runtime_vs_target AS
 WITH readings_with_next AS (
   SELECT
@@ -299,7 +302,6 @@ GROUP BY run_hour
 ORDER BY run_hour;
 
 DROP VIEW IF EXISTS view_tstate_hourly_env;
-
 CREATE VIEW view_tstate_hourly_env AS
 WITH hourly_env AS (
   SELECT 
@@ -342,3 +344,74 @@ JOIN fstate_cycles f
      date(f.start_timestamp / 1000, 'unixepoch', 'localtime')
 GROUP BY run_date
 ORDER BY run_date;
+
+-- Create segmented cycle table
+CREATE TABLE IF NOT EXISTS cycle_segments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thermostat_id INTEGER NOT NULL,
+    cycle_id INTEGER NOT NULL,
+    segment_start INTEGER NOT NULL,       -- Unix timestamp (ms)
+    segment_end INTEGER NOT NULL,         -- Unix timestamp (ms)
+    segment_runtime INTEGER NOT NULL,     -- Duration in ms
+    run_hour TEXT NOT NULL,               -- 'YYYY-MM-DD HH:00:00'
+    FOREIGN KEY (thermostat_id) REFERENCES thermostats(id),
+    FOREIGN KEY (cycle_id) REFERENCES tstate_cycles(id)
+);
+
+-- View for hourly runtime aggregation
+CREATE VIEW IF NOT EXISTS view_cycle_hourly_runtime AS
+SELECT 
+    thermostat_id,
+    run_hour,
+    SUM(segment_runtime) / 60000.0 AS total_runtime_minutes
+FROM cycle_segments
+GROUP BY thermostat_id, run_hour
+ORDER BY run_hour;
+
+CREATE TABLE IF NOT EXISTS compressors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thermostat_id INTEGER REFERENCES thermostats(id),
+    model TEXT,
+    rla REAL,
+    lra REAL,
+    voltage TEXT,
+    phase INTEGER,
+    hertz INTEGER,
+    hp REAL,
+    refrigerant TEXT,
+    charge_oz REAL,
+    charge_kg REAL,
+    pressure_high REAL,
+    pressure_low REAL,
+    ampacity_min REAL,
+    breaker_max REAL
+);
+
+CREATE TABLE IF NOT EXISTS thermostat_compressor (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thermostat_id INTEGER NOT NULL REFERENCES thermostats(id),
+    compressor_id INTEGER NOT NULL REFERENCES compressors(id),
+    UNIQUE(thermostat_id, compressor_id)
+);
+
+DROP VIEW IF EXISTS view_hvac_systems;
+CREATE VIEW view_hvac_systems AS
+SELECT 
+  t.*,
+  c.model,
+  c.rla,
+  c.lra,
+  c.voltage,
+  c.phase,
+  c.hertz,
+  c.hp,
+  c.refrigerant,
+  c.charge_oz,
+  c.charge_kg,
+  c.pressure_high,
+  c.pressure_low,
+  c.ampacity_min,
+  c.breaker_max
+FROM thermostats t
+JOIN compressors c
+  ON c.thermostat_id = t.id

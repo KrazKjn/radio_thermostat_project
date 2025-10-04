@@ -163,7 +163,7 @@ export const ThermostatProvider = ({ children }) => {
     }
   };
 
-  const fetchThermostatData = async (thermostatIp, hostname, tokenOverride) => {
+  const fetchThermostatData = async (thermostatIp, hostname, tokenOverride, timeout) => {
     if (!hostname || !thermostatIp || thermostatIp === "Loading ...") {
         Logger.warn("Hostname or thermostat IP not available yet!", 'ThermostatContext', 'fetchThermostatData');
         return null;
@@ -178,7 +178,8 @@ export const ThermostatProvider = ({ children }) => {
             "Failed to fetch thermostat data",
             "Fetching thermostat data...",
             logout,
-            updateAuth
+            updateAuth,
+            timeout || 30000
         );
         if (data) {
             Logger.debug(`ThermostatContext: Fetched thermostat data: ${JSON.stringify(data, null, 2)}`, 'ThermostatContext', 'fetchThermostatData');
@@ -266,7 +267,7 @@ export const ThermostatProvider = ({ children }) => {
         }
 
         // Fetch new data
-        const data = await fetchThermostatData(thermostatIp, hostname, tokenOverride ?? token);
+        const data = await fetchThermostatData(thermostatIp, hostname, tokenOverride ?? token, 60000);
 
         return data;
     } catch (error) {
@@ -286,7 +287,8 @@ export const ThermostatProvider = ({ children }) => {
             "Failed to fetch model info",
             "Fetching model info...",
             logout,
-            updateAuth
+            updateAuth,
+            60000
         );
         if (data) {
             Logger.debug(`Fetched model info: ${JSON.stringify(data, null, 2)}`, 'ThermostatContext', 'fetchModelInfo');
@@ -1045,6 +1047,182 @@ export const ThermostatProvider = ({ children }) => {
     }
   };
 
+  const getDailyRuntime = async (thermostatIp, hostname, days = -1, tokenOverride) => {
+    /* Fetch daily runtime data */ 
+    try {
+        const response = await apiFetch(
+            `${hostname}/stats/daily-runtime/${thermostatIp}?days=${days}`,
+            "GET",
+            null,
+            tokenOverride ?? token,
+            `Error fetching daily runtime data: ${thermostatIp}`,
+            `Fetching daily runtime data: ${thermostatIp}...`,
+            logout,
+            updateAuth
+        );
+        console.log(`Fetched daily runtime data: ${thermostatIp}`, response);
+        return response;
+    } catch (error) {
+        console.log(`Error fetching daily runtime data: ${thermostatIp}`, error);
+        console.error(`Error fetching daily runtime data: ${thermostatIp}`, error);
+        throw error;
+    }
+  };
+  
+const getHourlyRuntime = async (thermostatIp, hostname, hours = -1, tokenOverride) => {
+    /* Fetch hourly runtime data */ 
+    try {
+        const response = await apiFetch(
+            `${hostname}/stats/hourly-runtime/${thermostatIp}?hours=${hours}`,
+            "GET",
+            null,
+            tokenOverride ?? token,
+            `Error fetching hourly runtime data: ${thermostatIp}`,
+            `Fetching hourly runtime data: ${thermostatIp}...`,
+            logout,
+            updateAuth
+        );
+        console.log(`Fetched hourly runtime data: ${thermostatIp}`, response);
+        return response;
+    } catch (error) {
+        console.log(`Error fetching hourly runtime data: ${thermostatIp}`, error);
+        console.error(`Error fetching hourly runtime data: ${thermostatIp}`, error);
+        throw error;
+    }
+  };
+  
+  const getHourlyEnv = async (thermostatIp, hostname, hours = -1, tokenOverride) => {
+    /* Fetch hourly environment data */ 
+    try {
+        const response = await apiFetch(
+            `${hostname}/stats/hourly-env/${thermostatIp}?hours=${hours}`,
+            "GET",
+            null,
+            tokenOverride ?? token,
+            `Error fetching hourly env data: ${thermostatIp}`,
+            `Fetching hourly env data: ${thermostatIp}...`,
+            logout,
+            updateAuth
+        );
+        console.log(`Fetched hourly env data: ${thermostatIp}`, response);
+        return response;
+    } catch (error) {
+        console.log(`Error fetching hourly env data: ${thermostatIp}`, error);
+        console.error(`Error fetching hourly env data: ${thermostatIp}`, error);
+        throw error;
+    }
+  };
+
+  const getTempVsRuntime = async (thermostatIp, hostname, tokenOverride) => {
+    /* Fetch temperature vs runtime data */
+    try {
+        const response = await apiFetch(
+            `${hostname}/stats/temp-vs-runtime/${thermostatIp}`,
+            "GET",
+            null,
+            tokenOverride ?? token,
+            `Error fetching temperature vs runtime data: ${thermostatIp}`,
+            `Fetching temperature vs runtime data: ${thermostatIp}...`,
+            logout,
+            updateAuth
+        );
+        console.log(`Fetched temperature vs runtime data: ${thermostatIp}`, response);
+        return response;
+    } catch (error) {
+        console.log(`Error fetching temperature vs runtime data: ${thermostatIp}`, error);
+        console.error(`Error fetching temperature vs runtime data: ${thermostatIp}`, error);
+        throw error;
+    }
+  };
+
+  const getDailyModeRuntime = async (thermostatIp, hostname, days = -1, tokenOverride) => {
+    /* Fetch daily mode runtime data */
+    try {
+        const response = await apiFetch(
+            `${hostname}/stats/daily-mode-runtime/${thermostatIp}?days=${days}`,
+            "GET",
+            null,
+            tokenOverride ?? token,
+            `Error fetching daily mode runtime data: ${thermostatIp}`,
+            `Fetching daily mode runtime data: ${thermostatIp}...`,
+            logout,
+            updateAuth
+        );
+        console.log(`Fetched daily mode runtime data: ${thermostatIp}`, response);
+        return response;
+    } catch (error) {
+        console.log(`Error fetching daily mode runtime data: ${thermostatIp}`, error);
+        console.error(`Error fetching daily mode runtime data: ${thermostatIp}`, error);
+        throw error;
+    }
+  };
+
+  const getFanVsHvacDaily = async (thermostatIp, hostname, days = -1, tokenOverride) => {
+    /* Fetch fan vs hvac daily data */
+    try {
+        const response = await apiFetch(
+            `${hostname}/stats/fan-vs-hvac-daily/${thermostatIp}?days=${days}`,
+            "GET",
+            null,
+            tokenOverride ?? token,
+            `Error fetching fan vs hvac daily data: ${thermostatIp}`,
+            `Fetching fan vs hvac daily data: ${thermostatIp}...`,
+            logout,
+            updateAuth
+        );
+        console.log(`Fetched fan vs hvac daily data: ${thermostatIp}`, response);
+        return response;
+    } catch (error) {
+        console.log(`Error fetching fan vs hvac daily data: ${thermostatIp}`, error);
+        console.error(`Error fetching fan vs hvac daily data: ${thermostatIp}`, error);
+        throw error;
+    }
+  };
+
+  const getDailyCycles = async (thermostatIp, hostname, days = -1, tokenOverride) => {
+    /* Fetch daily cycles data */
+    try {
+      const response = await apiFetch(
+        `${hostname}/thermostat/${thermostatIp}/daily-cycles?days=${days}`,
+        "GET",
+        null,
+        tokenOverride ?? token,
+        `Error fetching daily cycles data: ${thermostatIp}`,
+        `Fetching daily cycles data: ${thermostatIp}...`,
+        logout,
+        updateAuth
+      );
+      console.log(`Fetched daily cycles data: ${thermostatIp}`, response);
+      return response;
+    } catch (error) {
+      console.log(`Error fetching daily cycles data: ${thermostatIp}`, error);
+      console.error(`Error fetching daily cycles data: ${thermostatIp}`, error);
+      throw error;
+    }
+  };
+
+  const getHourlyCycles = async (thermostatIp, hostname, hours = -1, tokenOverride) => {
+    /* Fetch hourly cycles data */
+    try {
+      const response = await apiFetch(
+        `${hostname}/thermostat/${thermostatIp}/hourly-cycles?hours=${hours}`,
+        "GET",
+        null,
+        tokenOverride ?? token,
+        `Error fetching hourly cycles data: ${thermostatIp}`,
+        `Fetching hourly cycles data: ${thermostatIp}...`,
+        logout,
+        updateAuth
+      );
+      console.log(`Fetched hourly cycles data: ${thermostatIp}`, response);
+      return response;
+    } catch (error) {
+      console.log(`Error fetching hourly cycles data: ${thermostatIp}`, error);
+      console.error(`Error fetching hourly cycles data: ${thermostatIp}`, error);
+      throw error;
+    }
+  };
+
   return (
     <ThermostatContext.Provider
         value={{
@@ -1087,6 +1265,14 @@ export const ThermostatProvider = ({ children }) => {
             updateSchedule,
             getCloudSettings,
             updateCloudSettings,
+            getDailyRuntime,
+            getHourlyRuntime,
+            getHourlyEnv,
+            getTempVsRuntime,
+            getDailyModeRuntime,
+            getFanVsHvacDaily,
+            getDailyCycles,
+            getHourlyCycles,
         }}
     >
         {children}

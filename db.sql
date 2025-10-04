@@ -358,7 +358,6 @@ CREATE TABLE IF NOT EXISTS cycle_segments (
     FOREIGN KEY (cycle_id) REFERENCES tstate_cycles(id)
 );
 
-
 -- View for hourly runtime aggregation
 CREATE VIEW IF NOT EXISTS view_cycle_hourly_runtime AS
 SELECT 
@@ -368,3 +367,51 @@ SELECT
 FROM cycle_segments
 GROUP BY thermostat_id, run_hour
 ORDER BY run_hour;
+
+CREATE TABLE IF NOT EXISTS compressors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thermostat_id INTEGER REFERENCES thermostats(id),
+    model TEXT,
+    rla REAL,
+    lra REAL,
+    voltage TEXT,
+    phase INTEGER,
+    hertz INTEGER,
+    hp REAL,
+    refrigerant TEXT,
+    charge_oz REAL,
+    charge_kg REAL,
+    pressure_high REAL,
+    pressure_low REAL,
+    ampacity_min REAL,
+    breaker_max REAL
+);
+
+CREATE TABLE IF NOT EXISTS thermostat_compressor (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thermostat_id INTEGER NOT NULL REFERENCES thermostats(id),
+    compressor_id INTEGER NOT NULL REFERENCES compressors(id),
+    UNIQUE(thermostat_id, compressor_id)
+);
+
+DROP VIEW IF EXISTS view_hvac_systems;
+CREATE VIEW view_hvac_systems AS
+SELECT 
+  t.*,
+  c.model,
+  c.rla,
+  c.lra,
+  c.voltage,
+  c.phase,
+  c.hertz,
+  c.hp,
+  c.refrigerant,
+  c.charge_oz,
+  c.charge_kg,
+  c.pressure_high,
+  c.pressure_low,
+  c.ampacity_min,
+  c.breaker_max
+FROM thermostats t
+JOIN compressors c
+  ON c.thermostat_id = t.id

@@ -39,6 +39,10 @@ router.post("/tswing/:ip", authWithRefresh, thermostatController.updateSwing);
 router.post("/schedule/:scheduleMode/:ip", authWithRefresh, thermostatController.updateSchedule);
 router.post("/schedule/:scheduleMode/:day/:ip", authWithRefresh, thermostatController.updateScheduleDay);
 router.post("/cloud/:ip", authWithRefresh, thermostatController.updateCloud);
+// Get daily cycle counts by thermostat IP
+router.get('/thermostat/:ip/daily-cycles', authWithRefresh, thermostatController.getDailyCycles);
+// Get hourly cycle counts and runtime by thermostat IP
+router.get('/thermostat/:ip/hourly-cycles', authWithRefresh, thermostatController.getHourlyCycles);
 
 // Scanner
 router.post("/scanner/start/:ip", authWithRefresh, thermostatController.startScanner);

@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions, TouchableOpacity } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { VictoryChart, VictoryBar, VictoryAxis, VictoryTheme } from 'victory';
-import { useThermostat } from "../context/ThermostatContext";
+import { Picker } from '@react-native-picker/picker';
+import { useThermostat } from '../context/ThermostatContext';
 import { useAuth } from '../context/AuthContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
-import commonStyles from "../styles/commonStyles";
+import commonStyles from '../styles/commonStyles';
 
 const Logger = require('./Logger');
 

@@ -681,7 +681,7 @@ const getDailyUsage = (req, res) => {
 
 const getThermostats = (req, res) => {
     const rows = db.prepare(`
-        SELECT * FROM thermostats
+        SELECT * FROM view_hvac_systems
     `).all();
 
     Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostats'); // Log the request body
@@ -1316,6 +1316,71 @@ const getTempVsRuntime = (req, res) => {
     }
 };
 
+const getDailyCycles = (req, res) => {
+    try {
+        const { ip } = req.params;
+        const { days } = req.query;
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        if (!thermostat) {
+            return res.status(404).json({ error: "Thermostat not found" });
+        }
+        const limitClause = (days && Number(days) > 0) ? `LIMIT ?` : ``;
+        const query = `
+            SELECT
+              date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+              COUNT(*) AS cycle_count,
+              SUM(run_time) AS total_runtime_minutes
+            FROM tstate_cycles
+            WHERE thermostat_id = ?
+            GROUP BY run_date
+            ORDER BY run_date DESC
+            ${limitClause};
+        `;
+
+        const rows = (limitClause)
+            ? db.prepare(query).all(thermostat.id, Number(days))
+            : db.prepare(query).all(thermostat.id);
+
+        res.json(rows.reverse());
+    } catch (error) {
+        Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
+        res.status(500).json({ error: 'Failed to retrieve daily cycles data' });
+    }
+};
+
+const getHourlyCycles = (req, res) => {
+    try {
+        const { ip } = req.params;
+        const { hours } = req.query;
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        if (!thermostat) {
+            return res.status(404).json({ error: "Thermostat not found" });
+        }
+        const limitClause = (hours && Number(hours) > 0) ? `LIMIT ?` : ``;
+        const query = `
+            SELECT
+                date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+                strftime('%H', start_timestamp / 1000, 'unixepoch', 'localtime') AS hour,
+                COUNT(*) AS cycle_count,
+                SUM((stop_timestamp - start_timestamp) / 60000.0) AS total_runtime_minutes
+            FROM tstate_cycles
+            WHERE thermostat_id = ? AND stop_timestamp IS NOT NULL
+            GROUP BY run_date, hour
+            ORDER BY run_date, hour DESC
+            ${limitClause};
+        `;
+
+        const rows = (limitClause)
+            ? db.prepare(query).all(thermostat.id, Number(hours))
+            : db.prepare(query).all(thermostat.id);
+
+        res.json(rows.reverse());
+    } catch (error) {
+        Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
+        res.status(500).json({ error: 'Failed to retrieve daily cycles data' });
+    }
+};
+
 module.exports = {
     getThermostatData,
     updateThermostat,
@@ -1352,4 +1417,6 @@ module.exports = {
     getHourlyEnv,
     getFanVsHvacDaily,
     getTempVsRuntime,
+    getDailyCycles,
+    getHourlyCycles,
 };

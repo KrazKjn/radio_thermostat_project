@@ -1179,6 +1179,50 @@ const getHourlyRuntime = async (thermostatIp, hostname, hours = -1, tokenOverrid
     }
   };
 
+  const getDailyCycles = async (thermostatIp, hostname, days = -1, tokenOverride) => {
+    /* Fetch daily cycles data */
+    try {
+      const response = await apiFetch(
+        `${hostname}/thermostat/${thermostatIp}/daily-cycles?days=${days}`,
+        "GET",
+        null,
+        tokenOverride ?? token,
+        `Error fetching daily cycles data: ${thermostatIp}`,
+        `Fetching daily cycles data: ${thermostatIp}...`,
+        logout,
+        updateAuth
+      );
+      console.log(`Fetched daily cycles data: ${thermostatIp}`, response);
+      return response;
+    } catch (error) {
+      console.log(`Error fetching daily cycles data: ${thermostatIp}`, error);
+      console.error(`Error fetching daily cycles data: ${thermostatIp}`, error);
+      throw error;
+    }
+  };
+
+  const getHourlyCycles = async (thermostatIp, hostname, hours = -1, tokenOverride) => {
+    /* Fetch hourly cycles data */
+    try {
+      const response = await apiFetch(
+        `${hostname}/thermostat/${thermostatIp}/hourly-cycles?hours=${hours}`,
+        "GET",
+        null,
+        tokenOverride ?? token,
+        `Error fetching hourly cycles data: ${thermostatIp}`,
+        `Fetching hourly cycles data: ${thermostatIp}...`,
+        logout,
+        updateAuth
+      );
+      console.log(`Fetched hourly cycles data: ${thermostatIp}`, response);
+      return response;
+    } catch (error) {
+      console.log(`Error fetching hourly cycles data: ${thermostatIp}`, error);
+      console.error(`Error fetching hourly cycles data: ${thermostatIp}`, error);
+      throw error;
+    }
+  };
+
   return (
     <ThermostatContext.Provider
         value={{
@@ -1227,6 +1271,8 @@ const getHourlyRuntime = async (thermostatIp, hostname, hours = -1, tokenOverrid
             getTempVsRuntime,
             getDailyModeRuntime,
             getFanVsHvacDaily,
+            getDailyCycles,
+            getHourlyCycles,
         }}
     >
         {children}

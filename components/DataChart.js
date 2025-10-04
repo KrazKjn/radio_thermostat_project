@@ -13,6 +13,7 @@ import RuntimeTrendChart from './RuntimeTrendChart';
 import TempCorrelationChart from './TempCorrelationChart';
 import ModeBreakdownChart from './ModeBreakdownChart';
 import FanHVACEfficiencyChart from './FanHVACEfficiencyChart';
+import CycleAnalyticsChart from './CycleAnalyticsChart';
 import { getChartColors } from './chartTheme';
 
 const Logger = require('./Logger');
@@ -321,6 +322,9 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                 <TouchableOpacity onPress={() => setChartMode("efficiency")} style={[styles.tab, chartMode === 'efficiency' && styles.activeTab]}>
                     <Text style={[styles.tabText, chartMode === 'efficiency' && styles.tabTextActive]}>Efficiency</Text>
                 </TouchableOpacity>
+                <TouchableOpacity onPress={() => setChartMode("cycles")} style={[styles.tab, chartMode === 'cycles' && styles.activeTab]}>
+                    <Text style={[styles.tabText, chartMode === 'cycles' && styles.tabTextActive]}>Cycles & Cost</Text>
+                </TouchableOpacity>
             </View>
 
             {/* Conditional Chart Rendering */}
@@ -488,6 +492,13 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                 <>
                     <Text style={subHeaderStyle}>Efficiency</Text>
                     <FanHVACEfficiencyChart thermostatIp={thermostatIp} isDarkMode={isDarkMode} parentComponent={parentComponent} />
+                </>
+            )}
+
+            {chartMode === "cycles" && (
+                <>
+                    <Text style={subHeaderStyle}>Cycles & Runtime</Text>
+                    <CycleAnalyticsChart thermostatIp={thermostatIp} isDarkMode={isDarkMode} parentComponent={parentComponent} />
                 </>
             )}
 

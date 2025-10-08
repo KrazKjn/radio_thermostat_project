@@ -55,14 +55,14 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null 
     const KwHDraw = thermostat?.rla ? (thermostat.rla * voltage / 1000) : 3.5; // Example values
     const costPerDay = ((d.total_runtime_minutes / 60) * costPerKwH * KwHDraw) || 0; // Example cost model
     return {
-        x: new Date(d.run_date).toLocaleDateString('en-US', { weekday: 'short', month: '2-digit', day: '2-digit' }),
+        x: new Date(`${d.run_date} 12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: '2-digit', day: '2-digit' }),
         y: d.cycle_count,
         label: `${d.cycle_count} cycles\n${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes\n$${costPerDay.toFixed(2)} / day`
     };
   });
 
   const formatHourlyData = hourlyData.map(d => {
-    const dateStr = new Date(d.run_date).toLocaleDateString('en-US', { weekday: 'short', month: '2-digit', day: '2-digit' });
+    const dateStr = new Date(`${d.run_date} 12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: '2-digit', day: '2-digit' });
     const hour = parseInt(d.hour, 10);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;

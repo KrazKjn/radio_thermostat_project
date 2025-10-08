@@ -1366,7 +1366,7 @@ const getHourlyCycles = (req, res) => {
             FROM tstate_cycles
             WHERE thermostat_id = ? AND stop_timestamp IS NOT NULL
             GROUP BY run_date, hour
-            ORDER BY run_date, hour DESC
+            ORDER BY run_date DESC, hour DESC
             ${limitClause};
         `;
 

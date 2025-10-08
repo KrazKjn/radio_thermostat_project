@@ -115,12 +115,14 @@ const ThermostatSelector = () => {
 
   if (thermostats === undefined || thermostats === null) {
     return (
-      <View style={[commonStyles.digitalCard, { margin: 16, alignItems: "center" }]}>
-        <ActivityIndicator size="large" color="#7A7AFF" />
-        <Text style={{ color: "#7A7AFF" }}>⏳ Waiting for thermostats...</Text>
-        <TouchableOpacity onPress={() => getThermostats(hostname, token)}>
-          <Text style={{ color: "#007AFF", marginTop: 10 }}>Refresh</Text>
-        </TouchableOpacity>
+      <View style={{ margin: 16 }}>
+        <View style={[commonStyles.digitalCard, { alignItems: "center" }]}>
+          <ActivityIndicator size="large" color="#7A7AFF" />
+          <Text style={{ color: "#7A7AFF" }}>⏳ Waiting for thermostats...</Text>
+          <TouchableOpacity onPress={() => getThermostats(hostname, token)}>
+            <Text style={{ color: "#007AFF", marginTop: 10 }}>Refresh</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   } else {

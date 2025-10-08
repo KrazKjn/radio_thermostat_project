@@ -32,7 +32,7 @@ const mapDailyData = (dailyJson, costPerKwH, KwHDraw) =>
             day: '2-digit'
         }),
         y: d.total_runtime_hr,
-        label: `${d.total_runtime_hr.toFixed(1)} minutes\n$${cost.toFixed(2)}`
+        label: `${d.total_runtime_hr.toFixed(1)} minutes\n${(d.total_runtime_hr / 60).toFixed(1)} hours\n$${cost.toFixed(2)}`
     };
   });
 
@@ -51,7 +51,7 @@ const mapHourlyData = (hourlyJson, costPerKwH, KwHDraw) =>
     return {
         x: `${mm}/${dd} ${hhStr} ${period}`,
         y: d.total_runtime_minutes / 60.0,
-        label: `${d.total_runtime_minutes.toFixed(1)} minutes\n$${cost.toFixed(2)}`
+        label: `${d.total_runtime_minutes.toFixed(1)} minutes\n${(d.total_runtime_minutes / 60).toFixed(2)} hours\n$${cost.toFixed(2)}`
     };
 });
 

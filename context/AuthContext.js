@@ -47,13 +47,18 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = async () => {
-        const token = await AsyncStorage.getItem("auth_token");
-        if (token) {
-            // Sending the token in the body to logout. If the token is expired, the server can still process the logout.
-            const data = await apiFetch(`${hostname}/logout`, "POST", { token });
+        let token = null;
+        try {
+             token = await AsyncStorage.getItem("auth_token");
+            if (token) {
+                // Sending the token in the body to logout. If the token is expired, the server can still process the logout.
+                const data = await apiFetch(`${hostname}/logout`, "POST", { token });
+            }
+            Logger.debug('Clearing Token.', 'AuthContext', 'logout', 0);
+            await AsyncStorage.removeItem("auth_token");
+        } catch (error) {
+            Logger.error(`Clearing Token. Error: ${error.message}`, 'AuthContext', 'logout');
         }
-        Logger.debug('Clearing Token.', 'AuthContext', 'logout', 0);
-        await AsyncStorage.removeItem("auth_token");
         setToken(null);
         setTokenInfo(null);
         Alert.alert("Logged out", "You have been logged out successfully.");
@@ -82,7 +87,11 @@ export const AuthProvider = ({ children }) => {
             }
         } catch (error) {
             Logger.error(`Clearing Token. Error: ${error.message}`, 'AuthContext', 'checkUserSession');
-            await AsyncStorage.removeItem("auth_token");
+            try {
+                await AsyncStorage.removeItem("auth_token");
+            } catch (error) {
+                Logger.error(`Clearing Token. Error: ${error.message}`, 'AuthContext', 'checkUserSession');
+            }
             setToken(null);
             setTokenInfo(null);
         }

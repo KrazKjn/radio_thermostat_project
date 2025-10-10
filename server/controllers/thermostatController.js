@@ -19,9 +19,10 @@ let lastSegmentUpdate = 0;
 const SEGMENT_INTERVAL_MS = 60000; // 1 minute or whatever cadence you prefer
 
 const getThermostatData = async (req, res) => {
+    let ip = undefined;
     try {
         Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostatData');
-        const ip = req.params.ip;
+        ip = req.params.ip;
         const currentTime = Date.now();
         const noCache = req.query.noCache === "true"; // Check for cache override
         let expiredData = false;
@@ -41,7 +42,18 @@ const getThermostatData = async (req, res) => {
             return res.json(cache[ip].values[0]); // Return the most recent cached value
         }
         Logger.debug(`[Thermostat] Fetching new data for IP ${ip}`, 'ThermostatController', 'getThermostatData', 1);
-        Logger.debug(`[Thermostat] noCache: ${noCache}, cache exists: ${!!cache[ip]}, cache length: ${cache[ip]?.values?.length}, lastUpdated: ${new Date(cache[ip]?.lastUpdated).toString()}, currentTime: ${new Date(currentTime).toString()}, time since last update: ${new Date(currentTime - (cache[ip]?.lastUpdated).toString() || 0)}`, 'ThermostatController', 'getThermostatData', 1);
+        const lastUpdated = cache[ip]?.lastUpdated;
+        const lastUpdatedDate = lastUpdated ? new Date(lastUpdated) : null;
+        const timeSinceLastUpdate = lastUpdated ? currentTime - lastUpdated : null;
+
+        Logger.debug(
+            `[Thermostat] noCache: ${noCache}, cache exists: ${!!cache[ip]}, cache length: ${cache[ip]?.values?.length}, ` +
+            `lastUpdated: ${lastUpdatedDate?.toString() ?? 'N/A'}, currentTime: ${new Date(currentTime).toString()}, ` +
+            `time since last update: ${timeSinceLastUpdate !== null ? timeSinceLastUpdate + 'ms' : 'N/A'}`,
+            'ThermostatController',
+            'getThermostatData',
+            1
+        );        
 
         // Fetch new data
         const response = await fetch(`http://${ip}/tstat`);
@@ -66,6 +78,7 @@ const getThermostatData = async (req, res) => {
 
         res.json(data);
     } catch (error) {
+        Logger.error(`[Thermostat] Error fetching data for IP ${ip}: ${error.message}`, 'ThermostatController', 'getThermostatData');
         res.status(500).json({ error: "Failed to retrieve thermostat data" });
     }
 };
@@ -119,6 +132,7 @@ const updateThermostat = async (req, res) => {
 
         res.json(data);
     } catch (error) {
+        Logger.error(`[Thermostat] Error Updating for IP ${ip}: ${error.message}`, 'ThermostatController', 'updateThermostat');
         res.status(500).json({ error: "Failed to update thermostat settings" });
     }
 };
@@ -132,45 +146,52 @@ const getCache = (req, res) => {
 };
 
 const getModel = async (req, res) => {
+    let ip = undefined;
     try {
         Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getModel', 1);
-        const ip = req.params.ip;
+        ip = req.params.ip;
         const response = await fetch(`http://${ip}/tstat/model`);
         const data = await response.json();
         res.json(data);
     } catch (error) {
+        Logger.error(`[Thermostat] Error getting model for IP ${ip}: ${error.message}`, 'ThermostatController', 'getModel');
         res.status(500).json({ error: "Failed to retrieve thermostat model/version data" });
     }
 };
 
 const getName = async (req, res) => {
+    let ip = undefined;
     try {
         Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getName', 1);
-        const ip = req.params.ip;
+        ip = req.params.ip;
         const response = await fetch(`http://${ip}/sys/name`);
         const data = await response.json();
         res.json(data);
     } catch (error) {
+        Logger.error(`[Thermostat] Error getting name for IP ${ip}: ${error.message}`, 'ThermostatController', 'getName');
         res.status(500).json({ error: "Failed to retrieve thermostat name data" });
     }
 };
 
 const getSwing = async (req, res) => {
+    let ip = undefined;
     try {
         Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getSwing', 1);
-        const ip = req.params.ip;
+        ip = req.params.ip;
         const response = await fetch(`http://${ip}/tstat/tswing`);
         const data = await response.json();
         res.json(data);
     } catch (error) {
+        Logger.error(`[Thermostat] Error getting swing for IP ${ip}: ${error.message}`, 'ThermostatController', 'getSwing');
         res.status(500).json({ error: "Failed to retrieve thermostat swing data" });
     }
 };
 
 const getThermostat = async (req, res) => {
+    let ip = undefined;
     try {
         Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostat', 1);
-        const { ip } = req.params;
+        ip = req.params.ip;
         const endpoints = {
             model: `http://${ip}/tstat/model`,
             name: `http://${ip}/sys/name`,
@@ -199,14 +220,16 @@ const getThermostat = async (req, res) => {
         }
         res.json(combinedData);
     } catch (error) {
+        Logger.error(`[Thermostat] Error fetching data for IP ${ip}: ${error.message}`, 'ThermostatController', 'getThermostat');
         res.status(500).json({ error: "Failed to retrieve thermostat data", details: error.message });
     }
 };
 
 const getThermostatDetailed = async (req, res) => {
+    let ip = undefined;
     try {
         Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostatDetailed', 1);
-        const { ip } = req.params;
+        ip = req.params.ip;
         const endpoints = {
             model: `http://${ip}/tstat/model`,
             name: `http://${ip}/sys/name`,
@@ -245,6 +268,7 @@ const getThermostatDetailed = async (req, res) => {
         }
         res.json(combinedData);
     } catch (error) {
+        Logger.error(`[Thermostat] Error fetching data for IP ${ip}: ${error.message}`, 'ThermostatController', 'getThermostatDetailed');
         res.status(500).json({ error: "Failed to retrieve thermostat data", details: error.message });
     }
 };
@@ -326,6 +350,7 @@ const updateName = async (req, res) => {
         const data = await response.json();
         res.json(data);
     } catch (error) {
+        Logger.error(`[Thermostat] Error updating name for IP ${ip}: ${error.message}`, 'ThermostatController', 'updateName');
         res.status(500).json({ error: "Failed to update thermostat name" });
     }
 };
@@ -344,6 +369,7 @@ const rebootServer = async (req, res) => {
         const data = await response.json();
         res.json(data);
     } catch (error) {
+        Logger.error(`[Thermostat] Error rebooting thermostat for IP ${ip}: ${error.message}`, 'ThermostatController', 'rebootServer');
         res.status(500).json({ error: "Failed to reboot thermostat" });
     }
 };
@@ -371,6 +397,7 @@ const updateSwing = async (req, res) => {
         const data = await response.json();
         res.json(data);
     } catch (error) {
+        Logger.error(`[Thermostat] Error updating tswing for IP ${ip}: ${error.message}`, 'ThermostatController', 'updateSwing');
         res.status(500).json({ error: "Failed to update thermostat tswing" });
     }
 };
@@ -575,7 +602,8 @@ function getScannerDataByIp(ip) {
         const queryStatement = `
             SELECT datetime(timestamp / 1000, 'unixepoch') AS formatted_date, *
             FROM thermostat_readings
-            WHERE ip = '${ip}' 
+            WHERE ip = '${ip}'
+              AND timestamp >= strftime('%s','now','-${CACHE_LIMIT} minutes') * 1000
             ORDER BY timestamp DESC
             LIMIT ${CACHE_LIMIT}
         `;
@@ -583,6 +611,7 @@ function getScannerDataByIp(ip) {
             SELECT datetime(timestamp / 1000, 'unixepoch') AS formatted_date, *
             FROM thermostat_readings
             WHERE ip = ? 
+              AND timestamp >= strftime('%s','now','-${CACHE_LIMIT} minutes') * 1000
             ORDER BY timestamp DESC
             LIMIT ${CACHE_LIMIT}
         `).all(ip);

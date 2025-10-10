@@ -37,7 +37,11 @@ const apiFetch = async (url, method = "GET", body = null, token = null, errorMes
     const refreshedToken = response.headers.get('x-refreshed-token');
     if (refreshedToken && updateAuthFn) {
       Logger.info("Received refreshed token from server, updating storage ...", 'apiFetch', 'apiFetch');
-      await AsyncStorage.setItem("auth_token", refreshedToken);
+      try {
+        await AsyncStorage.setItem("auth_token", refreshedToken);
+      } catch (error) {
+        Logger.error(`Error saving refreshed token: ${error.message}`, 'apiFetch', 'apiFetch');
+      }
 
       // Call the provided function
       Logger.info("Updating token in memory and DB ...", 'apiFetch', 'apiFetch');

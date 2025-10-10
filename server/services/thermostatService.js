@@ -253,6 +253,15 @@ async function scannerIntervalTask(ip) {
         cache[ip].values.unshift(updatedData);
         cache[ip].lastUpdated = currentTime;
 
+        const CACHE_LIMIT_MINUTES = CACHE_LIMIT;
+        const CACHE_LIMIT_MS = CACHE_LIMIT_MINUTES * 60 * 1000;
+
+        // Remove entries older than CACHE_LIMIT minutes
+        cache[ip].values = cache[ip].values.filter(entry => {
+            return currentTime - entry.timestamp <= CACHE_LIMIT_MS;
+        });
+
+        // Ensure we do not exceed CACHE_LIMIT entries either
         if (cache[ip].values.length > CACHE_LIMIT) {
             cache[ip].values.pop();
         }

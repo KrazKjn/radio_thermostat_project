@@ -348,6 +348,7 @@ const updateName = async (req, res) => {
         });
   
         const data = await response.json();
+        Logger.debug(`POST response: ${JSON.stringify(data, null, 2)}`, 'ThermostatController', 'updateName', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error updating name for IP ${ip}: ${error.message}`, 'ThermostatController', 'updateName');
@@ -359,14 +360,20 @@ const rebootServer = async (req, res) => {
     Logger.debug(`Received POST request: ${req.url}`, 'ThermostatController', 'rebootServer', 1);
     const { ip } = req.params;
 
+    const payload = {
+      command: "reboot"
+    };
+    Logger.debug(`POST body: ${JSON.stringify(payload, null, 2)}`, 'ThermostatController', 'rebootServer');
+
     try {
         const response = await fetch(`http://${ip}/sys/command`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ command: "reboot" })
+            body: JSON.stringify(payload)
         });
 
         const data = await response.json();
+        Logger.debug(`POST response: ${JSON.stringify(data, null, 2)}`, 'ThermostatController', 'rebootServer', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error rebooting thermostat for IP ${ip}: ${error.message}`, 'ThermostatController', 'rebootServer');
@@ -395,6 +402,7 @@ const updateSwing = async (req, res) => {
         });
   
         const data = await response.json();
+        Logger.debug(`POST response: ${JSON.stringify(data, null, 2)}`, 'ThermostatController', 'updateSwing', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error updating tswing for IP ${ip}: ${error.message}`, 'ThermostatController', 'updateSwing');

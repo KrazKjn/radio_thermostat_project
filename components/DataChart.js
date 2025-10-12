@@ -38,9 +38,11 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
     const fetchData = async () => {
         try {
             const scannedData = await fetchScannedData(thermostatIp, hostname, token);
-            Logger.debug(`Data fetched: ${scannedData}`, 'DataChart', 'fetchData', 2);
+            Logger.debug(`Data fetched: ${Logger.formatJSON(scannedData).substring(0, 100)}`, 'DataChart', 'fetchData', 2);
+            console.log("Data fetched:", scannedData);
             let filteredData = scannedData.filter(entry => entry.temp !== 0);
-            Logger.debug(`Data fetched (filteredData): ${filteredData}`, 'DataChart', 'fetchData', 2);
+            Logger.debug(`Data fetched (filteredData): ${Logger.formatJSON(filteredData).substring(0, 100)}`, 'DataChart', 'fetchData', 2);
+            console.log("Data fetched (filteredData):", filteredData);
             setDataPoints(prev => {
                 // Check if lastUpdated is in ascending order
                 const isAscending = filteredData.length > 1 &&
@@ -375,20 +377,20 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                                     style: { borderRadius: 16 },
                                     strokeWidth: 2,  // Make lines more visible
                                     propsForDots: {
-                                    r: "3",     // Smaller dots
-                                    strokeWidth: "1",
-                                    stroke: "#ffa726",
+                                        r: "3",     // Smaller dots
+                                        strokeWidth: "1",
+                                        stroke: "#ffa726",
                                     },
                                     propsForBackgroundLines: {
-                                    strokeWidth: 1,  // Make lines thicker (> 1)
-                                    stroke: "#444444",  // Solid gray axis lines
-                                    strokeDasharray: "1, 10",  // Change dashed effect
+                                        strokeWidth: 1,  // Make lines thicker (> 1)
+                                        stroke: "#444444",  // Solid gray axis lines
+                                        strokeDasharray: "1, 10",  // Change dashed effect
                                     },
                                     propsForLabels: {
-                                    fontFamily: "Roboto", // Or "Arial", "Helvetica Neue", etc.
-                                    fontWeight: "bold",   // Optional
-                                    fontSize: 11,         // Optional
-                                    zIndex: 1,
+                                        fontFamily: "Roboto", // Or "Arial", "Helvetica Neue", etc.
+                                        fontWeight: "bold",   // Optional
+                                        fontSize: 11,         // Optional
+                                        //zIndex: 1,
                                     },
                                 }}
                                 bezier
@@ -452,7 +454,7 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                                         fontFamily: "Roboto", // Or "Arial", "Helvetica Neue", etc.
                                         fontWeight: "bold",   // Optional
                                         fontSize: 11,         // Optional
-                                        zIndex: 1,
+                                        //zIndex: 1,
                                     },
                                 }}
                                 fromZero

@@ -3,6 +3,47 @@ const Logger = require('../../components/Logger');
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY || undefined;
 
+/*
+{
+  "timelines": {
+    "minutely": [
+      {
+        "time": "2025-10-13T17:53:00Z",
+        "values": {
+          "altimeterSetting": 29.99,
+          "cloudBase": null,
+          "cloudCeiling": null,
+          "cloudCover": 13,
+          "dewPoint": 42.1,
+          "evapotranspiration": 0.015,
+          "freezingRainIntensity": 0,
+          "humidity": 23,
+          "iceAccumulation": 0,
+          "iceAccumulationLwe": 0,
+          "precipitationProbability": 0,
+          "pressureSeaLevel": 29.94,
+          "pressureSurfaceLevel": 28.63,
+          "rainAccumulation": 0,
+          "rainIntensity": 0,
+          "sleetAccumulation": 0,
+          "sleetAccumulationLwe": 0,
+          "sleetIntensity": 0,
+          "snowAccumulation": 0,
+          "snowAccumulationLwe": 0,
+          "snowIntensity": 0,
+          "temperature": 83.2,
+          "temperatureApparent": 80.8,
+          "uvHealthConcern": 0,
+          "uvIndex": 0,
+          "visibility": 9.94,
+          "weatherCode": 1100,
+          "windDirection": 67,
+          "windGust": 9.5,
+          "windSpeed": 7.4
+        }
+      },
+        ...
+*/
 class WeatherService {
     constructor() {
         this.cache = {

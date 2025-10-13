@@ -44,8 +44,10 @@ CREATE TABLE IF NOT EXISTS scan_data (
     fstate INTEGER,                    -- Fan state
     outdoor_temp REAL,                 -- Outdoor temperature
     cloud_cover REAL,                  -- Percentage Cloud Cover
-    rainAccumulation REALm             -- total rainfall over a period
+    rainAccumulation REAL,             -- total rainfall over a period
     rainIntensity REAL,                -- rate of rainfall
+    humidity REAL,                     -- Indoor humidity
+    outdoor_humidity REAL,             -- Outdoor humidity
     FOREIGN KEY (thermostat_id) REFERENCES thermostats(id)
 );
 
@@ -57,7 +59,8 @@ SELECT sd.timestamp,
     t.uuid, t.ip, t.location,
     sd.temp, sd.tmode, sd.tTemp,
     sd.tstate, sd.fstate, sd.outdoor_temp,
-    sd.cloud_cover, sd.rainAccumulation, sd.rainIntensity
+    sd.cloud_cover, sd.rainAccumulation, sd.rainIntensity,
+    sd.humidity, sd.outdoor_humidity
 FROM scan_data sd
 JOIN thermostats t ON sd.thermostat_id = t.id
 
@@ -312,6 +315,8 @@ WITH hourly_env AS (
     AVG(cloud_cover) AS avg_cloud_cover,
     AVG(rainIntensity) AS avg_rain_intensity,
     SUM(rainAccumulation) AS total_rain_accumulation,
+    AVG(humidity) AS avg_humidity,
+    AVG(outdoor_humidity) AS avg_outdoor_humidity,
     COUNT(*) AS sample_count
   FROM scan_data
   GROUP BY env_hour
@@ -325,6 +330,8 @@ SELECT
   e.avg_cloud_cover,
   e.avg_rain_intensity,
   e.total_rain_accumulation,
+  e.avg_humidity,
+  e.avg_outdoor_humidity,
   e.sample_count
 FROM tstate_cycles c
 LEFT JOIN hourly_env e

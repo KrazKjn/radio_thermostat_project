@@ -47,23 +47,6 @@ function writeToFile(formatted) {
 
 function log(level, message, moduleName = '', functionName = '', debug_level = 0) {
   if (level === 'debug' && debug_level > LOG_DEBUG_LEVEL) return; // Skip debug messages above the set level
-  if (level === 'error') {
-    // try {
-    //   if (typeof window === 'undefined') {
-    //     // Node.js environment
-    //     const player = require('play-sound')();
-    //     player.play('assets/Windows Ding.wav', function (err) {
-    //       if (err) throw err;
-    //     });
-    //   } else {
-    //     // Browser environment
-    //     const audio = new Audio('https://www.soundjay.com/button/beep-07.wav');
-    //     audio.play();
-    //   }
-    // } catch (err) {
-    //   console.error('Error playing sound:', err.message);
-    // }
-  }
   const formatted = formatMessage(level, message, moduleName, functionName);
   const color = colors[level] || colors.reset;
   const output = `${color}${formatted}${colors.reset}`;
@@ -78,6 +61,7 @@ function log(level, message, moduleName = '', functionName = '', debug_level = 0
     // Optionally, could also log to stderr or send alerts
     console.error(formatted);
   }
+  return formatted;
 }
 
 function formatJSON(obj) {

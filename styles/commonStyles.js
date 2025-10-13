@@ -246,6 +246,7 @@ const commonStyles = StyleSheet.create({
   },
   digitalTempRow: {
       flexDirection: "row",
+      flexWrap: "wrap", // allows children to wrap to next line
       alignItems: "flex-end",
       justifyContent: "center",
       marginVertical: 4,
@@ -254,6 +255,7 @@ const commonStyles = StyleSheet.create({
     flexDirection: "column",
     alignItems: "center",
     marginHorizontal: 8,
+    flexShrink: 1, // allows block to shrink if needed
   },
   digitalLabel: {
       color: "#aaa",
@@ -270,10 +272,17 @@ const commonStyles = StyleSheet.create({
   },
   digitalTempSeparator: {
       color: "#f55",
-      fontSize: 56,
+      fontSize: 48,
       fontFamily: "monospace",
       fontWeight: "bold",
       marginRight: 8,
+      minWidth: 0, // allows shrinking if needed
+  },
+  digitalHumidity: {
+    fontSize: 14,
+    color: "#aaa",
+    marginTop: 2,
+    fontWeight: "400",
   },
   digitalTarget: {
       color: "#ff0",

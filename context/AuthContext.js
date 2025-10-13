@@ -17,32 +17,51 @@ export const AuthProvider = ({ children }) => {
     }, [hostname]);
 
     const login = async (username, password) => {
+        let logMessage = null;
         try {
-            if (!hostname || hostname === "Loading...") {
-                console.log("Waiting for hostname to resolve...");
-                return false;
+            logMessage = Logger.debug("Resolving Hostname...", 'AuthContext', 'login', 2);
+            try {
+                if (!hostname || hostname === "Loading...") {
+                    logMessage = Logger.debug("Waiting for hostname to resolve...", 'AuthContext', 'login', 2);
+                    return { success: false, error: "Hostname not resolved" };
+                }
+            } catch (e) {
+                logMessage = Logger.error(`Error occurred while checking hostname: ${e.message}`, 'AuthContext', 'login');
             }
-            const data = await apiFetch(`${hostname}/login`, "POST", { username, password });
+            logMessage = Logger.debug("Login attempt started...", 'AuthContext', 'login', 2);
+            let data = null;
+            try {
+                data = await apiFetch(`${hostname}/login`, "POST", { username, password });
+                logMessage = Logger.debug("Login attempt started... done", 'AuthContext', 'login', 2);
+            } catch (error) {
+                logMessage = Logger.error(`Login attempt failed: ${error.message}`, 'AuthContext', 'login');
+                throw error;
+            }
             try {
                 await AsyncStorage.setItem("auth_token", data.token);
-            } catch {}
-            Logger.debug(JSON.stringify(data, null, 2), 'AuthContext', 'login', 0);
+                logMessage = Logger.debug("Token stored in AsyncStorage", 'AuthContext', 'login', 2);
+            } catch (e) {
+                console.error("Failed to store token in AsyncStorage", e);
+                logMessage = Logger.error(`Failed to store token in AsyncStorage: ${e.message}`, 'AuthContext', 'login');
+            }
+            logMessage = Logger.debug(JSON.stringify(data, null, 2), 'AuthContext', 'login', 0);
             setToken(data.token);
+            logMessage = Logger.debug("Token set in state", 'AuthContext', 'login', 2);
             const decoded = await apiFetch(`${hostname}/tokenInfo?token=${data.token}`, "GET");
             if (decoded) {
-                Logger.error(`Token: ${JSON.stringify(decoded, null, 2)}`, 'AuthContext', 'login');
-                Logger.error(`Issued: ${new Date(decoded.iat * 1000).toLocaleString()}`, 'AuthContext', 'login');
-                Logger.error(`Expires: ${new Date(decoded.exp * 1000).toLocaleString()}`, 'AuthContext', 'login');
+                logMessage = Logger.error(`Token: ${JSON.stringify(decoded, null, 2)}`, 'AuthContext', 'login');
+                logMessage = Logger.error(`Issued: ${new Date(decoded.iat * 1000).toLocaleString()}`, 'AuthContext', 'login');
+                logMessage = Logger.error(`Expires: ${new Date(decoded.exp * 1000).toLocaleString()}`, 'AuthContext', 'login');
                 setTokenInfo(decoded);
             } else {
                 throw new Error("Invalid token format");
             }
 
-            return true;
+            return { success: true, error: null, logMessage: logMessage };
         } catch (error) {
-            console.log(`Login failed: ${error.message}`);
+            Logger.error(`Login failed: ${error.message}`, 'AuthContext', 'login', 2);
             Alert.alert("Login Failed", error.message);
-            return false;
+            return { success: false, error: error.message, logMessage: logMessage};
         }
     };
 
@@ -70,7 +89,7 @@ export const AuthProvider = ({ children }) => {
             if (!storedToken) throw new Error("No valid session");
 
             if (!hostname || hostname === "Loading...") {
-                console.log("Waiting for hostname to resolve...");
+                Logger.debug("Waiting for hostname to resolve...", 'AuthContext', 'checkUserSession', 0);
                 return false;
             }
 

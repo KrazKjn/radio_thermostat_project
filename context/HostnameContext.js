@@ -4,13 +4,14 @@ import { Platform } from "react-native";
 export const HostnameContext = createContext(null);
 
 export const HostnameProvider = ({ children }) => {
-  // For web, use localhost:5000 for development.
-  // For production, this should be replaced with the actual server URL.
-  // For mobile, you'll need to use the IP address of your development machine.
-  const backendUrl = Platform.select({
-    web: 'http://localhost:3000',
-    default: 'http://<your-dev-machine-ip>:3000', // Replace with your IP
-  });
+  let backendUrl;
+
+  if (Platform.OS === 'web') {
+    const host = window.location.hostname; // e.g., '192.168.1.100' or 'example.com'
+    backendUrl = `http://${host}:3000`; // Adjust port if needed
+  } else {
+    backendUrl = 'http://<your-ip>:3000'; // Replace with your dev machine IP for mobile
+  }
 
   const [hostname, setHostname] = useState(backendUrl);
 

@@ -809,15 +809,21 @@ const updateWeatherData = async () => {
             const cloudCover = entry.values?.cloudCover ?? 'N/A';
             const rainAccumulation = entry.values?.rainAccumulation ?? 'N/A';
             const rainIntensity = entry.values?.rainIntensity ?? 'N/A';
+            const humidity = entry.values?.humidity ?? 'N/A';
 
-            if (temperature !== undefined && cloudCover !== undefined) {
+            Logger.info(`Current Weather at ${time} => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}, humidity: ${humidity}`, 'thermostatController', 'updateWeatherData');
+            Logger.debug(`Full weather entry data: ${JSON.stringify(entry, null, 2)}`, 'thermostatController', 'updateWeatherData', 2);
+
+            if (temperature !== undefined && cloudCover !== undefined &&
+                rainAccumulation !== undefined && rainIntensity !== undefined &&
+                humidity !== undefined) {
                 const ts = new Date(entry.time);
                 const minuteKey = ts.toISOString().slice(0, 16); // e.g., "2025-09-17T15:42"
 
                 // Update the matching time if found
                 const stmt = db.prepare(`
                     UPDATE scan_data
-                    SET outdoor_temp = ?, cloud_cover = ?, rainAccumulation = ?, rainIntensity = ?
+                    SET outdoor_temp = ?, cloud_cover = ?, rainAccumulation = ?, rainIntensity = ?, outdoor_humidity = ?
                     WHERE (outdoor_temp IS NULL OR
                         cloud_cover IS NULL) AND
                         strftime('%Y-%m-%dT%H:%M', timestamp / 1000, 'unixepoch') = ?
@@ -828,6 +834,7 @@ const updateWeatherData = async () => {
                         cloudCover,
                         rainAccumulation,
                         rainIntensity,
+                        humidity,
                         minuteKey,
                     );
                     if (result.changes === 1) {
@@ -836,13 +843,13 @@ const updateWeatherData = async () => {
                         // Update the latest entry with the lastest values
                         const fallbackStmt = db.prepare(`
                             UPDATE scan_data
-                            SET outdoor_temp = ?, cloud_cover = ?, rainAccumulation = ?, rainIntensity = ?
+                            SET outdoor_temp = ?, cloud_cover = ?, rainAccumulation = ?, rainIntensity = ?, outdoor_humidity = ?
                             WHERE (outdoor_temp IS NULL OR cloud_cover IS NULL)
                             ORDER BY timestamp DESC
                             LIMIT 1
                         `);
-                        fallbackStmt.run(temperature, cloudCover, rainAccumulation, rainIntensity);
-                        Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}`, 'thermostatController', 'updateWeatherData', 1);
+                        fallbackStmt.run(temperature, cloudCover, rainAccumulation, rainIntensity, humidity);
+                        Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}, humidity: ${humidity}`, 'thermostatController', 'updateWeatherData', 1);
                         return { temperature, cloudCover };
                     }
                 }
@@ -1087,6 +1094,7 @@ const captureStatIn = async (req, res) => {
                 cache[ip].cloud_cover = weatherData ? weatherData.cloudCover : null;
                 cache[ip].rainAccumulation = weatherData ? weatherData.rainAccumulation : null;
                 cache[ip].rainIntensity = weatherData ? weatherData.rainIntensity : null;
+                cache[ip].outdoor_humidity = weatherData ? weatherData.humidity : null;
 
                 await processCycleQueue();
             } catch (error) {
@@ -1270,6 +1278,8 @@ const getHourlyEnv = (req, res) => {
                 AVG(cloud_cover) AS avg_cloud_cover,
                 AVG(rainIntensity) AS avg_rain_intensity,
                 SUM(rainAccumulation) AS total_rain_accumulation,
+                AVG(humidity) AS avg_humidity,
+                AVG(outdoor_humidity) AS avg_outdoor_humidity,
                 COUNT(*) AS sample_count
               FROM scan_data
               WHERE thermostat_id = ?
@@ -1284,6 +1294,8 @@ const getHourlyEnv = (req, res) => {
               e.avg_cloud_cover,
               e.avg_rain_intensity,
               e.total_rain_accumulation,
+              e.avg_humidity,
+              e.avg_outdoor_humidity,
               e.sample_count
             FROM tstate_cycles c
             LEFT JOIN hourly_env e

@@ -4,11 +4,13 @@ import { useAuth } from "../context/AuthContext";
 import commonStyles from "../styles/commonStyles";
 
 const LoginScreen = () => {
-  const { login } = useAuth();
+  const { login, token } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const usernameRef = useRef(null);
   const passwordRef = useRef(null);
+  const showErrors = false
 
   useEffect(() => {
     if (usernameRef.current) {
@@ -17,12 +19,29 @@ const LoginScreen = () => {
   }, []);
 
   const handleLogin = async () => {
-    await login(username, password);
+    try {
+      setError("Login in progress...");
+      const rc = await login(username, password);
+      if (rc.success) {
+        // Handle successful login
+      } else {
+        setError(`${rc.error}: ${rc.logMessage}`);
+      }
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
   return (
     <View style={commonStyles.container}>
       <Text style={commonStyles.header}>Login</Text>
+      {showErrors && (
+        <View>
+          <Text>Debug Info:</Text>
+          <Text>Token: {token || "Not set"}</Text>
+          {error && <Text>Error: {error}</Text>}
+        </View>
+      )}
       <TextInput
         ref={usernameRef} // Assign ref
         style={commonStyles.input}

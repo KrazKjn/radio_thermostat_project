@@ -127,8 +127,11 @@ const ThermostatDisplay = ({
                         <View style={commonStyles.digitalTempBlock}>
                             <Text style={commonStyles.digitalLabel}>Room</Text>
                             <Text style={commonStyles.digitalTemp}>
-                                {thermostat.currentTemp}
+                                {thermostat.currentTemp ?? "--"}
                                 <Text style={commonStyles.digitalUnit}>°F</Text>
+                            </Text>
+                            <Text style={commonStyles.digitalHumidity}>
+                                {thermostat.humidity ?? "--"}% RH
                             </Text>
                         </View>
                         {thermostat.outdoor_temp && (
@@ -142,6 +145,9 @@ const ThermostatDisplay = ({
                                 <Text style={commonStyles.digitalTemp}>
                                     {thermostat.outdoor_temp}
                                     <Text style={commonStyles.digitalUnit}>°F</Text>
+                                </Text>
+                                <Text style={commonStyles.digitalHumidity}>
+                                    {thermostat.outdoor_humidity ?? "--"}% RH
                                 </Text>
                             </View>
                         )}

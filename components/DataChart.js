@@ -158,11 +158,13 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
                         hold: scannedData[0].hold,
                         outdoor_temp: scannedData[0].outdoor_temp,
                         cloud_cover: scannedData[0].cloud_cover,
+                        outdoor_humidity: scannedData[0].outdoor_humidity,
+                        humidity: scannedData[0].humidity,
                         lastUpdated: Date.now(),
                     };
                     const contextData = thermostats[thermostatIp] || {};
                     // Shallow compare relevant fields (expand as needed)
-                    const fieldsToCheck = ["targetTemp", "currentTempMode", "currentFanMode", "currentTime", "formattedTime", "override", "hold", "outdoor_temp", "cloud_cover"];
+                    const fieldsToCheck = ["targetTemp", "currentTempMode", "currentFanMode", "currentTime", "formattedTime", "override", "hold", "outdoor_temp", "cloud_cover", "humidity", "ourdoor_humidity"];
                     const hasDifference = fieldsToCheck.some(
                         key => latestScan[key] !== contextData[key]
                     );
@@ -279,7 +281,7 @@ const DataChart = ({ thermostatIp, parentComponent = null }) => {
         
     return (
         <ScrollView style={styles.container}>
-            {parentComponent == null && <Text style={styles.header}>📊 Thermostat Data Chart</Text>}
+            {parentComponent == null && <Text style={subHeaderStyle}>📊 Thermostat Data Chart</Text>}
 
             {/* Export Button */}
             {parentComponent == null && <View style={{ marginBottom: 10 }}>

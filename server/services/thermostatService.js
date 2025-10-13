@@ -122,15 +122,21 @@ const updateWeatherData = async () => {
             const cloudCover = entry.values?.cloudCover ?? 'N/A';
             const rainAccumulation = entry.values?.rainAccumulation ?? 'N/A';
             const rainIntensity = entry.values?.rainIntensity ?? 'N/A';
+            const humidity = entry.values?.humidity ?? 'N/A';
 
-            if (temperature !== undefined && cloudCover !== undefined) {
+            Logger.info(`Current Weather at ${time} => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}, humidity: ${humidity}`, 'thermostatService', 'updateWeatherData');
+            Logger.debug(`Full weather entry data: ${JSON.stringify(entry, null, 2)}`, 'thermostatService', 'updateWeatherData', 2);
+
+            if (temperature !== undefined && cloudCover !== undefined &&
+                rainAccumulation !== undefined && rainIntensity !== undefined &&
+                humidity !== undefined) {
                 const ts = new Date(entry.time);
                 const minuteKey = ts.toISOString().slice(0, 16); // e.g., "2025-09-17T15:42"
 
                 // Update the matching time if found
                 const stmt = db.prepare(`
                     UPDATE scan_data
-                    SET outdoor_temp = ?, cloud_cover = ?, rainAccumulation = ?, rainIntensity = ?
+                    SET outdoor_temp = ?, cloud_cover = ?, rainAccumulation = ?, rainIntensity = ?, outdoor_humidity = ?
                     WHERE (outdoor_temp IS NULL OR
                         cloud_cover IS NULL) AND
                         strftime('%Y-%m-%dT%H:%M', timestamp / 1000, 'unixepoch') = ?
@@ -141,6 +147,7 @@ const updateWeatherData = async () => {
                         cloudCover,
                         rainAccumulation,
                         rainIntensity,
+                        humidity,
                         minuteKey,
                     );
                     if (result.changes === 1) {
@@ -149,13 +156,13 @@ const updateWeatherData = async () => {
                         // Update the latest entry with the lastest values
                         const fallbackStmt = db.prepare(`
                             UPDATE scan_data
-                            SET outdoor_temp = ?, cloud_cover = ?, rainAccumulation = ?, rainIntensity = ?
+                            SET outdoor_temp = ?, cloud_cover = ?, rainAccumulation = ?, rainIntensity = ?, outdoor_humidity = ?
                             WHERE (outdoor_temp IS NULL OR cloud_cover IS NULL)
                             ORDER BY timestamp DESC
                             LIMIT 1
                         `);
-                        fallbackStmt.run(temperature, cloudCover, rainAccumulation, rainIntensity);
-                        Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}`, 'thermostatService', 'updateWeatherData', 1);
+                        fallbackStmt.run(temperature, cloudCover, rainAccumulation, rainIntensity, humidity);
+                        Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}, outdoor_humidity: ${humidity}`, 'thermostatService', 'updateWeatherData', 1);
                         return { temperature, cloudCover };
                     }
                 }

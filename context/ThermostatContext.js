@@ -6,6 +6,7 @@ import { HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO } from '.
 
 const Logger = require('../components/Logger');
 const ThermostatContext = createContext();
+const CACHE_EXPIRATION = 120; // 120 seconds
 
 export const ThermostatProvider = ({ children }) => {
   const { token, logout, updateAuth, user } = useAuth(); // <-- Now available everywhere in this provider
@@ -236,6 +237,7 @@ export const ThermostatProvider = ({ children }) => {
                         updateObj.cloud_cover = entry.values?.cloudCover ?? 'N/A';
                         updateObj.rainAccumulation = entry.values?.rainAccumulation ?? 'N/A';
                         updateObj.rainIntensity = entry.values?.rainIntensity ?? 'N/A';
+                        updateObj.outdoor_humidity = entry.values?.humidity ?? 'N/A';
                     }
                 }
             }
@@ -258,7 +260,7 @@ export const ThermostatProvider = ({ children }) => {
         if (
             useCache &&
             currentThermostat?.lastUpdated &&
-            Date.now() - currentThermostat.lastUpdated < 1000 * 60
+            Date.now() - currentThermostat.lastUpdated < 1000 * CACHE_EXPIRATION
         ) {
             Logger.info("Using cached thermostat data.", 'ThermostatContext', 'getCurrentTemperature');
             return currentThermostat;

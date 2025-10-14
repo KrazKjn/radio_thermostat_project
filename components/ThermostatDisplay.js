@@ -239,13 +239,13 @@ const ThermostatDisplay = ({
                         <Icon name="home-outline" size={28} color={activeScreen === "home" ? "#0ff" : "#aaa"} />
                         <Text style={commonStyles.menuText}>Home</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("schedule")}>
-                        <Icon name="calendar-outline" size={28} color={activeScreen === "schedule" ? "#0ff" : "#aaa"} />
-                        <Text style={commonStyles.menuText}>Schedules</Text>
-                    </TouchableOpacity>
                     <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("chart")}>
                         <Icon name="stats-chart-outline" size={28} color={activeScreen === "chart" ? "#0ff" : "#aaa"} />
                         <Text style={commonStyles.menuText}>Charts</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("schedule")}>
+                        <Icon name="calendar-outline" size={28} color={activeScreen === "schedule" ? "#0ff" : "#aaa"} />
+                        <Text style={commonStyles.menuText}>Schedules</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("users")}>
                         <Icon name="settings-outline" size={28} color={activeScreen === "users" ? "#0ff" : "#aaa"} />

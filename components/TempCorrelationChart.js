@@ -6,10 +6,11 @@ import { useAuth } from '../context/AuthContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
 import commonStyles from "../styles/commonStyles";
+import withExport from './withExport';
 
 const Logger = require('./Logger');
 
-const TempCorrelationChart = ({ thermostatIp, isDarkMode, parentComponent = null }) => {
+const TempCorrelationChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange }) => {
     const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const { getTempVsRuntime } = useThermostat();
@@ -29,10 +30,14 @@ const TempCorrelationChart = ({ thermostatIp, isDarkMode, parentComponent = null
                         y: d.compressor_minutes,
                     }));
                     setChartData(data);
+                    if (onDataChange) {
+                        onDataChange(data);
+                    }
                 } else {
                     throw new Error(json.error || 'Failed to fetch temperature correlation data');
                 }
-            } catch (error) {
+            } catch (error)
+ {
                 Logger.error(`Error fetching temp correlation data: ${error.message}`, 'TempCorrelationChart', 'fetchData');
             }
         };
@@ -98,4 +103,15 @@ const styles = StyleSheet.create({
     },
 });
 
-export default TempCorrelationChart;
+const TempCorrelationChartWithExport = withExport(TempCorrelationChart);
+
+export default (props) => {
+    const [data, setData] = useState([]);
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    const fileName = `thermostat_${props.thermostatIp}_${dateStr}_${hour}${minute}_temp_correlation.csv`;
+
+    return <TempCorrelationChartWithExport {...props} data={data} fileName={fileName} onDataChange={setData} />;
+};

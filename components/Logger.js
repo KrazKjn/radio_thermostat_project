@@ -1,4 +1,5 @@
 const { json } = require('body-parser');
+const { exec } = require('child_process');
 
 let fs, path, LOG_FILE_PATH;
 let fileLoggingEnabled = false;
@@ -14,7 +15,8 @@ try {
   console.warn('File logging disabled: fs or __dirname not available');
 }
 const LOG_MODE = process.env.LOG_MODE || 'screen'; // 'screen', 'file', or 'both'
-const LOG_DEBUG_LEVEL = process.env.LOG_DEBUG_LEVEL || 4; // 0=general, >= 1 => Depening level of debug verbosity
+let level = parseInt(process.env.LOG_DEBUG_LEVEL, 10);
+const LOG_DEBUG_LEVEL = Number.isInteger(level) ? level : 4;
 
 const levels = {
   info: 'INFO',
@@ -32,6 +34,25 @@ const colors = {
   json: '\x1b[32m'   // green
 };
 
+function beep(frequency = 1000, duration = 300) {
+  if (exec) {
+    exec(`powershell -c "[console]::beep(${frequency},${duration})"`);
+  }
+}
+
+function playSound(level, debug_level = 0) {
+  if (level === 'error') {
+    beep(2000, 300);
+  }
+  if (level === 'debug' && debug_level <= LOG_DEBUG_LEVEL) {
+    try {
+      process.stdout.write('\u0007'); // Bell sound
+    } catch (error) {
+      console.error('Error playing sound:', error);
+    }
+  }
+}
+
 function formatMessage(level, message, moduleName, functionName) {
   const timestamp = new Date().toLocaleString();
   const context = [moduleName, functionName].filter(Boolean).join('.');
@@ -47,6 +68,7 @@ function writeToFile(formatted) {
 
 function log(level, message, moduleName = '', functionName = '', debug_level = 0) {
   if (level === 'debug' && debug_level > LOG_DEBUG_LEVEL) return; // Skip debug messages above the set level
+  playSound(level, debug_level);
   const formatted = formatMessage(level, message, moduleName, functionName);
   const color = colors[level] || colors.reset;
   const output = `${color}${formatted}${colors.reset}`;

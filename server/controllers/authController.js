@@ -114,20 +114,24 @@ const tokenInfo = (req, res) => {
       if (new Date(decoded.exp * 1000) < twoHoursFromNow) {
         // User Token detected, check for oldToken to refresh in DB
         const newToken = req.query?.newToken;
-        Logger.debug(`User Token: newToken = ${newToken}, token = ${token}`, 'AuthController', 'tokenInfo', 2);
-        if (newToken && newToken !== token) {
-          const now = Math.floor(Date.now() / 1000);
-          // Invalidate the old token in the database
-          Logger.debug(`Updating DB:user_sessions ...`, 'AuthController', 'tokenInfo', 2);
-          db.prepare(`
-              UPDATE user_sessions
-              SET sessionToken = ?, createdAt = ?, expiresAt = ?
-              WHERE sessionToken = ?
-            `).run(newToken, now, decoded.exp, token);
-          Logger.debug(`Updating DB:user_sessions ... done`, 'AuthController', 'tokenInfo', 2);
-          decoded = jwt.decode(newToken);
-        } else {
-          Logger.debug(`oldToken and new token are the same.`, 'AuthController', 'tokenInfo', 2);
+        if (newToken !== undefined && newToken !== null) {
+          Logger.debug(`New User Token Provided: newToken = ${newToken}, token = ${token}`, 'AuthController', 'tokenInfo', 2);
+          if (newToken !== token) {
+            const now = Math.floor(Date.now() / 1000);
+            // Invalidate the old token in the database
+            Logger.debug(`Updating DB:user_sessions ...`, 'AuthController', 'tokenInfo', 2);
+            decoded = jwt.decode(newToken);
+            db.prepare(`
+                UPDATE user_sessions
+                SET sessionToken = ?, createdAt = ?, expiresAt = ?
+                WHERE sessionToken = ?
+              `).run(newToken, now, decoded.exp, token);
+            Logger.debug(`Updating DB:user_sessions ... done`, 'AuthController', 'tokenInfo', 2);
+          } else {
+            Logger.debug(`oldToken and new token are the same.`, 'AuthController', 'tokenInfo', 2);
+          }
+        } else{
+          Logger.debug(`New User Token NOT Provided.`, 'AuthController', 'tokenInfo', 2);
         }
       } else {
         Logger.debug(`Service token ...`, 'AuthController', 'tokenInfo', 2);

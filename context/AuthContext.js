@@ -124,7 +124,7 @@ export const AuthProvider = ({ children }) => {
         }
         if (newToken) {
             Logger.debug('Updating info with new Token ...', 'AuthContext', 'updateAuth', 2);
-            //setToken(newToken);
+            setToken(newToken);
         } else {
             Logger.error('New token missing ...', 'AuthContext', 'updateAuth');
         }
@@ -137,8 +137,8 @@ export const AuthProvider = ({ children }) => {
             Logger.debug(`Calling ${hostname}/tokenInfo?token=${oldToken} ...`, 'AuthContext', 'updateAuth', 2);
             const decoded = await apiFetch(
                 `${hostname}/tokenInfo?token=${oldToken}&newToken=${newToken}`, 
-                "GET", 
-                null, 
+                "GET",
+                null,
                 null,
                 null,
                 null,

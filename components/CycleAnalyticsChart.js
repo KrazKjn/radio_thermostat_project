@@ -7,10 +7,11 @@ import { useAuth } from '../context/AuthContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
 import commonStyles from '../styles/commonStyles';
+import withExport from './withExport';
 
 const Logger = require('./Logger');
 
-const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null }) => {
+const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange, viewMode }) => {
   const { token } = useAuth();
   const hostname = React.useContext(HostnameContext);
   const { getThermostats, getDailyCycles, getHourlyCycles } = useThermostat();
@@ -35,12 +36,19 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null 
         setDailyData(daily);
         setHourlyData(hourly);
         setThermostats(definedThermostats || []);
+        if (onDataChange) {
+            if (viewMode === 'daily') {
+                onDataChange(daily);
+            } else {
+                onDataChange(hourly);
+            }
+        }
       } catch (error) {
         Logger.error(`Error fetching cycle analytics: ${error.message}`, 'CycleAnalyticsChart', 'fetchData');
       }
     };
     fetchData();
-  }, [thermostatIp, hostname, dayLimit, hourLimit, token]);
+  }, [thermostatIp, hostname, dayLimit, hourLimit, token, viewMode]);
 
   const formatDailyData = dailyData.map(d => {
     const thermostat = thermostats.find(t => t.ip === thermostatIp);
@@ -207,4 +215,16 @@ const styles = StyleSheet.create({
   },
 });
 
-export default CycleAnalyticsChart;
+const CycleAnalyticsChartWithExport = withExport(CycleAnalyticsChart);
+
+export default (props) => {
+    const [data, setData] = useState([]);
+    const [viewMode, setViewMode] = useState('daily');
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    const fileName = `thermostat_${props.thermostatIp}_${dateStr}_${hour}${minute}_cycle_analytics_${viewMode}.csv`;
+
+    return <CycleAnalyticsChartWithExport {...props} data={data} fileName={fileName} onDataChange={setData} viewMode={viewMode} />;
+};

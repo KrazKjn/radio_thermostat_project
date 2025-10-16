@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
 import commonStyles from '../styles/commonStyles';
+import withExport from './withExport';
 
 const Logger = require('./Logger');
 
@@ -55,7 +56,7 @@ const mapHourlyData = (hourlyJson, costPerKwH, KwHDraw) =>
     };
 });
 
-const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null }) => {
+const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange }) => {
     const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const { getThermostats, getDailyRuntime, getHourlyRuntime } = useThermostat();
@@ -87,13 +88,21 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null })
                 ]);
 
                 if (Array.isArray(dailyJson)) {
-                    setDailyData(mapDailyData(dailyJson, costPerKwH, KwHDraw));
+                    const mappedDailyData = mapDailyData(dailyJson, costPerKwH, KwHDraw);
+                    setDailyData(mappedDailyData);
+                    if (viewMode === 'daily' && onDataChange) {
+                        onDataChange(mappedDailyData);
+                    }
                 } else {
                     throw new Error(dailyJson.error || 'Failed to fetch daily runtime');
                 }
 
                 if (Array.isArray(hourlyJson)) {
-                    setHourlyData(mapHourlyData(hourlyJson, costPerKwH, KwHDraw));
+                    const mappedHourlyData = mapHourlyData(hourlyJson, costPerKwH, KwHDraw);
+                    setHourlyData(mappedHourlyData);
+                    if (viewMode === 'hourly' && onDataChange) {
+                        onDataChange(mappedHourlyData);
+                    }
                 } else {
                     throw new Error(hourlyJson.error || 'Failed to fetch hourly runtime');
                 }
@@ -103,7 +112,7 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null })
         };
 
         fetchData();
-    }, [thermostatIp, hostname, dayLimit, hourLimit, token, costPerKwH]);
+    }, [thermostatIp, hostname, dayLimit, hourLimit, token, costPerKwH, viewMode]);
     
     const subHeaderStyle = parentComponent == null ? styles.subHeader : commonStyles.digitalLabel;
 
@@ -231,4 +240,16 @@ const styles = StyleSheet.create({
     },
 });
 
-export default RuntimeTrendChart;
+const RuntimeTrendChartWithExport = withExport(RuntimeTrendChart);
+
+export default (props) => {
+    const [data, setData] = useState([]);
+    const [viewMode, setViewMode] = useState('daily');
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    const fileName = `thermostat_${props.thermostatIp}_${dateStr}_${hour}${minute}_runtime_${viewMode}.csv`;
+
+    return <RuntimeTrendChartWithExport {...props} data={data} fileName={fileName} onDataChange={setData} />;
+};

@@ -8,10 +8,11 @@ import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
 import commonStyles from "../styles/commonStyles";
 import { HVAC_MODE_HEAT, HVAC_MODE_COOL } from '../constants/hvac_mode';
+import withExport from './withExport';
 
 const Logger = require('./Logger');
 
-const ModeBreakdownChart = ({ thermostatIp, isDarkMode, parentComponent = null }) => {
+const ModeBreakdownChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange }) => {
     const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const { getDailyModeRuntime } = useThermostat();
@@ -35,6 +36,9 @@ const ModeBreakdownChart = ({ thermostatIp, isDarkMode, parentComponent = null }
                         { name: `minutes Cooling (${formatValue(coolRuntime / 60)} Hours)`, population: coolRuntime, color: 'rgba(0, 0, 255, 0.5)', legendFontFamily: 'Roboto', legendFontSize: 14, legendFontColor: '#7F7F7F', legendFontSize: 15 },
                     ];
                     setChartData(data);
+                    if (onDataChange) {
+                        onDataChange(data);
+                    }
                 } else {
                     throw new Error(json.error || 'Failed to fetch mode breakdown data');
                 }
@@ -109,4 +113,15 @@ const styles = StyleSheet.create({
     },
 });
 
-export default ModeBreakdownChart;
+const ModeBreakdownChartWithExport = withExport(ModeBreakdownChart);
+
+export default (props) => {
+    const [data, setData] = useState([]);
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    const fileName = `thermostat_${props.thermostatIp}_${dateStr}_${hour}${minute}_mode_breakdown.csv`;
+
+    return <ModeBreakdownChartWithExport {...props} data={data} fileName={fileName} onDataChange={setData} />;
+};

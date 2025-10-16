@@ -7,10 +7,11 @@ import { useAuth } from '../context/AuthContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
 import commonStyles from "../styles/commonStyles";
+import withExport from './withExport';
 
 const Logger = require('./Logger');
 
-const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = null }) => {
+const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange }) => {
     const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const { getFanVsHvacDaily } = useThermostat();
@@ -37,6 +38,9 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
                     });
 
                     setChartData(data);
+                    if (onDataChange) {
+                        onDataChange(data);
+                    }
                 } else {
                     throw new Error(json.error || 'Failed to fetch fan vs hvac data');
                 }
@@ -131,4 +135,15 @@ const styles = StyleSheet.create({
     },
 });
 
-export default FanHVACEfficiencyChart;
+const FanHVACEfficiencyChartWithExport = withExport(FanHVACEfficiencyChart);
+
+export default (props) => {
+    const [data, setData] = useState([]);
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    const fileName = `thermostat_${props.thermostatIp}_${dateStr}_${hour}${minute}_fan_hvac_efficiency.csv`;
+
+    return <FanHVACEfficiencyChartWithExport {...props} data={data} fileName={fileName} onDataChange={setData} />;
+};

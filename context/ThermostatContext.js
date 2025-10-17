@@ -8,7 +8,7 @@ const ThermostatContext = createContext();
 const CACHE_EXPIRATION = 120; // 120 seconds
 
 export const ThermostatProvider = ({ children }) => {
-  const { authenticatedApiFetch } = useAuth(); // <-- Now available everywhere in this provider
+  const { token, authenticatedApiFetch } = useAuth(); // <-- Now available everywhere in this provider
   const { weatherData, setWeatherData, fetchWeather } = useWeather(); // <-- Now available everywhere in this provider
   const [thermostats, setThermostats] = useState({}); // Store multiple thermostats
   const [scannerStatus, setScannerStatus] = useState({}); // Store scanner statuses

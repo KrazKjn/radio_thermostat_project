@@ -111,7 +111,7 @@ const ThermostatDisplay = ({
                             {thermostat.formattedTime || "Loading..."}
                         </Text>
                         <View style={commonStyles.userInfoContainer}>
-                            <Text style={commonStyles.userName}>{tokenInfo?.user?.name || 'User'}</Text>
+                            <Text style={commonStyles.userName}>{tokenInfo?.username || 'User'}</Text>
                             <Text style={commonStyles.tokenExpiration}>
                                 Expires: {formatTokenExpiration(tokenInfo?.exp)}
                             </Text>

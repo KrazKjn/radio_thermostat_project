@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from "react";
+import React, { createContext, useState, useContext, useEffect, useCallback } from "react";
 import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { HostnameContext } from "./HostnameContext";
@@ -139,7 +139,7 @@ export const AuthProvider = ({ children }) => {
                 `${hostname}/tokenInfo?token=${oldToken}&newToken=${newToken}`, 
                 "GET",
                 null,
-                null,
+                oldToken,
                 null,
                 null,
                 null,
@@ -157,7 +157,10 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const authenticatedApiFetch = async (url, method, body, errorMessage, logMessage, timeout) => {
+    const authenticatedApiFetch = useCallback(async (url, method, body, errorMessage, logMessage, timeout) => {
+        if (!token) {
+            throw new Error("No authentication token available");
+        }
         return await apiFetch(
             url,
             method,
@@ -169,8 +172,8 @@ export const AuthProvider = ({ children }) => {
             updateAuth,
             timeout
         );
-    };
-    
+    }, [token, logout, updateAuth]);
+
     return (
         <AuthContext.Provider value={{ token, tokenInfo, updateAuth, login, logout, authenticatedApiFetch }}>
             {children}

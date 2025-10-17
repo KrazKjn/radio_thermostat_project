@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { View, Text, ScrollView, Switch, TextInput, StyleSheet, useWindowDimensions } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import { useThermostat } from "../context/ThermostatContext";
-import { useAuth } from "../context/AuthContext";
 import { HostnameContext } from "../context/HostnameContext";
 import commonStyles from "../styles/commonStyles";
 import { HVAC_MODE_HEAT, HVAC_MODE_COOL } from '../constants/hvac_mode';
@@ -13,7 +12,6 @@ import withExport from "./withExport";
 const Logger = require('./Logger');
 
 const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIsDarkMode, onDataChange }) => {
-    const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const { register } = React.useContext(DataRefreshContext);
     const { fetchScannedData, getScannerStatus, startScanner, stopScanner, thermostats, updateThermostatState, formatTime, isTokenExpired } = useThermostat();
@@ -28,7 +26,7 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
 
     const fetchData = async () => {
         try {
-            const scannedData = await fetchScannedData(thermostatIp, hostname, token);
+            const scannedData = await fetchScannedData(thermostatIp, hostname);
             let filteredData = scannedData.filter(entry => entry.temp !== 0);
             const tempData = filteredData.length > 1 && new Date(filteredData[0].lastUpdated) < new Date(filteredData[filteredData.length - 1].lastUpdated) ? filteredData : [...filteredData].reverse();
             setDataPoints(tempData);
@@ -43,7 +41,7 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
     useEffect(() => {
         const checkScannerStatus = async () => {
             try {
-                const status = await getScannerStatus(thermostatIp, hostname, token);
+                const status = await getScannerStatus(thermostatIp, hostname);
                 if (status) {
                     setIsScannerOn(true);
                     setIntervalValue(Math.max(1, Math.round(status.interval / 60000)));
@@ -70,14 +68,14 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
         if (value) {
             try {
                 startRefreshTimer();
-                await startScanner(thermostatIp, hostname, token, interval * 60000);
+                await startScanner(thermostatIp, hostname, interval * 60000);
             } catch (error) {
                 console.error("Error starting scanner:", error);
             }
         } else {
             try {
                 stopRefreshTimer();
-                await stopScanner(thermostatIp, hostname, token);
+                await stopScanner(thermostatIp, hostname);
             } catch (error) {
                 console.error("Error stopping scanner:", error);
             }
@@ -90,9 +88,9 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
         if (isScannerOn) {
             try {
                 stopRefreshTimer();
-                await stopScanner(thermostatIp, hostname, token);
+                await stopScanner(thermostatIp, hostname);
                 startRefreshTimer(validatedInterval * 60000);
-                await startScanner(thermostatIp, hostname, token, validatedInterval * 60000);
+                await startScanner(thermostatIp, hostname, validatedInterval * 60000);
             } catch (error) {
                 console.error("Error updating scanner interval:", error);
             }
@@ -104,11 +102,7 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
         stopRefreshTimer();
         const timer = setInterval(async () => {
             try {
-                const scannedData = await fetchScannedData(thermostatIp, hostname, token);
-                if (isTokenExpired(token)) {
-                    stopRefreshTimer();
-                    return;
-                }
+                const scannedData = await fetchScannedData(thermostatIp, hostname);
                 if (scannedData.length > 0) {
                     const latestScan = {
                         currentTemp: scannedData[0].temp,

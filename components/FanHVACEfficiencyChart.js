@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { VictoryChart, VictoryBar, VictoryAxis, VictoryTheme } from 'victory';
 import { useThermostat } from "../context/ThermostatContext";
-import { useAuth } from '../context/AuthContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
 import commonStyles from "../styles/commonStyles";
@@ -12,7 +11,6 @@ import withExport from './withExport';
 const Logger = require('./Logger');
 
 const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange }) => {
-    const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const { getFanVsHvacDaily } = useThermostat();
     const [chartData, setChartData] = useState([]);
@@ -25,7 +23,7 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const json = await getFanVsHvacDaily(thermostatIp, hostname, dayLimit, token);
+                const json = await getFanVsHvacDaily(thermostatIp, hostname, dayLimit);
                 if (Array.isArray(json)) {
                     const data = [];
 
@@ -50,7 +48,7 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
         };
 
         fetchData();
-    }, [thermostatIp, hostname, dayLimit, token]);
+    }, [thermostatIp, hostname, dayLimit]);
 
     const subHeaderStyle = parentComponent == null ? styles.subHeader : commonStyles.digitalLabel;
 

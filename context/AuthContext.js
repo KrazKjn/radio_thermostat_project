@@ -156,9 +156,23 @@ export const AuthProvider = ({ children }) => {
             Logger.error(`Error updating token info: ${error.message}`, 'AuthContext', 'updateAuth');
         }
     };
+
+    const authenticatedApiFetch = async (url, method, body, errorMessage, logMessage, timeout) => {
+        return await apiFetch(
+            url,
+            method,
+            body,
+            token,
+            errorMessage,
+            logMessage,
+            logout,
+            updateAuth,
+            timeout
+        );
+    };
     
     return (
-        <AuthContext.Provider value={{ token, tokenInfo, updateAuth, login, logout }}>
+        <AuthContext.Provider value={{ token, tokenInfo, updateAuth, login, logout, authenticatedApiFetch }}>
             {children}
         </AuthContext.Provider>
     );

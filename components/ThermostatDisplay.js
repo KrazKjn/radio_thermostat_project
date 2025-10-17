@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useContext } from "react";
 import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
+import { useAuth } from "../context/AuthContext";
 import ThermostatToggle from "./ThermostatToggle";
 import FanToggle from "./FanToggle";
 import HoldToggle from "./HoldToggle";
@@ -21,8 +22,6 @@ const Logger = require('./Logger');
 const ThermostatDisplay = ({
     thermostat,
     thermostatIp,
-    token,
-    logout,
     hostname,
     getCurrentTemperature,
     updateThermostatName,
@@ -31,25 +30,38 @@ const ThermostatDisplay = ({
     setActiveScreen,
     updateThermostatTime
 }) => {
+    const { tokenInfo, logout: authLogout } = useAuth();
     const { users, updateUser, disableUser } = useContext(UserContext);
     const { register } = useContext(DataRefreshContext);
     const showTempControlModes = new Set([1, 2]);
     const showMenu = true;
     const intervalRef = useRef();
 
+    const formatTokenExpiration = (exp) => {
+        if (!exp) return 'N/A';
+        const now = new Date();
+        const expiration = new Date(exp * 1000);
+        const diff = expiration.getTime() - now.getTime();
+        const minutes = Math.floor(diff / 60000);
+        if (minutes < 1) return 'less than a minute';
+        if (minutes < 60) return `in ${minutes} minutes`;
+        const hours = Math.floor(minutes / 60);
+        return `in ${hours} hours`;
+    };
+
     // Poll for temperature every 60 seconds in home mode
     useEffect(() => {
         if (typeof getCurrentTemperature === "function") {
             // Initial fetch
-            getCurrentTemperature(thermostatIp, hostname, token);
+            getCurrentTemperature(thermostatIp, hostname);
             // Subscribe to refresh
             const unsubscribe = register(() => {
                 Logger.info("[Timer triggered, refreshing temperature", 'ThermostatDisplay', 'useEffect');
-                getCurrentTemperature(thermostatIp, hostname, token);
+                getCurrentTemperature(thermostatIp, hostname);
             });
             return () => unsubscribe();
         }
-    }, [activeScreen, thermostatIp, hostname, token, getCurrentTemperature, register]);
+    }, [activeScreen, thermostatIp, hostname, getCurrentTemperature, register]);
 
     // Handler to update a user
     const handleUserUpdate = async (userId, updates) => {
@@ -71,7 +83,7 @@ const ThermostatDisplay = ({
         }
     };
 
-    const rebootThermostat = async (thermostatIp, hostname, token) => {
+    const rebootThermostat = async (thermostatIp, hostname) => {
         try {
             const confirmed = window.confirm("Are you sure you want to reboot the thermostat?");
             if (!confirmed) {
@@ -80,7 +92,7 @@ const ThermostatDisplay = ({
             }
 
             Logger.info("Rebooting thermostat...", 'ThermostatDisplay', 'rebootThermostat');
-            await rebootThermostatServer(thermostatIp, hostname, token);
+            await rebootThermostatServer(thermostatIp, hostname);
             Logger.info("Thermostat rebooted successfully", 'ThermostatDisplay', 'rebootThermostat');
         } catch (error) {
             console.error("Error rebooting thermostat:", error);
@@ -93,11 +105,20 @@ const ThermostatDisplay = ({
         if (activeScreen === "home") {
             return (
                 <>
-                    {/* Top Row: Time */}
+                    {/* Top Row: Time and User Info */}
                     <View style={commonStyles.topRow}>
                         <Text style={commonStyles.digitalTime}>
                             {thermostat.formattedTime || "Loading..."}
                         </Text>
+                        <View style={commonStyles.userInfoContainer}>
+                            <Text style={commonStyles.userName}>{tokenInfo?.user?.name || 'User'}</Text>
+                            <Text style={commonStyles.tokenExpiration}>
+                                Expires: {formatTokenExpiration(tokenInfo?.exp)}
+                            </Text>
+                            <TouchableOpacity onPress={authLogout} style={commonStyles.logoutButton}>
+                                <Text style={commonStyles.logoutButtonText}>Logout</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     {/* Device Info Row */}
@@ -259,19 +280,19 @@ const ThermostatDisplay = ({
                         <Icon name="remove-outline" size={28} color="#0ff" />
                         <Text style={commonStyles.menuText}></Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => updateThermostatTime(thermostatIp, hostname, token)} >
+                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => updateThermostatTime(thermostatIp, hostname)} >
                         <Icon name="time-outline" size={28} color={"#0ff"} />
                         <Text style={commonStyles.menuText}>Sync Time</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => getCurrentTemperature(thermostatIp, hostname, token, false)} >
+                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => getCurrentTemperature(thermostatIp, hostname, false)} >
                         <Icon name="refresh-outline" size={28} color={"#0ff"} />
                         <Text style={commonStyles.menuText}>Refresh</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => rebootThermostat(thermostatIp, hostname, token)} >
+                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => rebootThermostat(thermostatIp, hostname)} >
                         <Icon name="reload-outline" size={28} color={"#0ff"} />
                         <Text style={commonStyles.menuText}>Reboot</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={commonStyles.menuItem} onPress={logout} >
+                    <TouchableOpacity style={commonStyles.menuItem} onPress={authLogout} >
                         <Icon name="log-out-outline" size={28} color={"#dc3545"} />
                         <Text style={[commonStyles.menuText, { color: "#dc3545" }]}>Logout</Text>
                     </TouchableOpacity>

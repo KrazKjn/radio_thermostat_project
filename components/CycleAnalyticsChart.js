@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { VictoryChart, VictoryBar, VictoryAxis, VictoryGroup, VictoryTheme, VictoryTooltip } from 'victory';
 import { Picker } from '@react-native-picker/picker';
 import { useThermostat } from '../context/ThermostatContext';
-import { useAuth } from '../context/AuthContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
 import commonStyles from '../styles/commonStyles';
@@ -12,7 +11,6 @@ import withExport from './withExport';
 const Logger = require('./Logger');
 
 const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange, viewMode }) => {
-  const { token } = useAuth();
   const hostname = React.useContext(HostnameContext);
   const { getThermostats, getDailyCycles, getHourlyCycles } = useThermostat();
   const [dailyData, setDailyData] = useState([]);
@@ -30,9 +28,9 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const daily = await getDailyCycles(thermostatIp, hostname, dayLimit, token);
-        const hourly = await getHourlyCycles(thermostatIp, hostname, hourLimit, token);
-        const definedThermostats = await getThermostats(hostname, token);
+        const daily = await getDailyCycles(thermostatIp, hostname, dayLimit);
+        const hourly = await getHourlyCycles(thermostatIp, hostname, hourLimit);
+        const definedThermostats = await getThermostats(hostname);
         setDailyData(daily);
         setHourlyData(hourly);
         setThermostats(definedThermostats || []);
@@ -48,7 +46,7 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
       }
     };
     fetchData();
-  }, [thermostatIp, hostname, dayLimit, hourLimit, token, viewMode]);
+  }, [thermostatIp, hostname, dayLimit, hourLimit, viewMode]);
 
   const formatDailyData = dailyData.map(d => {
     const thermostat = thermostats.find(t => t.ip === thermostatIp);

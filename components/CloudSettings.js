@@ -3,14 +3,12 @@ import { View, Text, TextInput, Switch, TouchableOpacity, ActivityIndicator, Ale
 import Icon from "react-native-vector-icons/Ionicons";
 import commonStyles from "../styles/commonStyles";
 import { useThermostat } from "../context/ThermostatContext";
-import { useAuth } from "../context/AuthContext";
 import { HostnameContext } from "../context/HostnameContext";
 
 const Logger = require('./Logger');
 
 const CloudSettings = ({ thermostat }) => {
     const { getCloudSettings, updateCloudSettings, disableThermostat } = useThermostat();
-    const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const [settings, setSettings] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -26,7 +24,7 @@ const CloudSettings = ({ thermostat }) => {
             if (!thermostat.thermostatInfo.ip || thermostat.thermostatInfo.ip === "Loading ...") return;
             // Fetch cloud settings when the component mounts or when the thermostat IP changes
             setLoading(true);
-            getCloudSettings(thermostat.thermostatInfo.ip, hostname, token)
+            getCloudSettings(thermostat.thermostatInfo.ip, hostname)
                 .then(data => setSettings(data))
                 .catch(() => {
                     alert("Error", "Failed to fetch cloud settings.");
@@ -44,7 +42,7 @@ const CloudSettings = ({ thermostat }) => {
     const handleSave = async () => {
         setSaving(true);
         try {
-            await updateCloudSettings(thermostat.thermostatInfo.ip, hostname, token, settings);
+            await updateCloudSettings(thermostat.thermostatInfo.ip, hostname, settings);
             alert("Success", "Cloud settings updated.");
         } catch (e) {
             alert("Error", "Failed to update cloud settings.");
@@ -56,7 +54,7 @@ const CloudSettings = ({ thermostat }) => {
     const handleRemove = async () => {
         setRemoving(true);
         try {
-            await disableThermostat(hostname, token, thermostat);
+            await disableThermostat(hostname, thermostat);
             alert("Success", "Cloud settings removed.");
         } catch (e) {
             alert("Error", "Failed to remove cloud settings.");

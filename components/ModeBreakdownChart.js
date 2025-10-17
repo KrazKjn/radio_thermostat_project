@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { PieChart } from 'react-native-chart-kit';
 import { useThermostat } from "../context/ThermostatContext";
-import { useAuth } from '../context/AuthContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
 import commonStyles from "../styles/commonStyles";
@@ -13,7 +12,6 @@ import withExport from './withExport';
 const Logger = require('./Logger');
 
 const ModeBreakdownChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange }) => {
-    const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const { getDailyModeRuntime } = useThermostat();
     const [chartData, setChartData] = useState([]);
@@ -26,7 +24,7 @@ const ModeBreakdownChart = ({ thermostatIp, isDarkMode, parentComponent = null, 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const json = await getDailyModeRuntime(thermostatIp, hostname, dayLimit, token);
+                const json = await getDailyModeRuntime(thermostatIp, hostname, dayLimit);
                 if (json) {
                     const heatRuntime = Math.round(json.filter(d => d.tmode === HVAC_MODE_HEAT).reduce((acc, cur) => acc + cur.total_runtime_hr, 0) * 100) / 100;
                     const coolRuntime = Math.round(json.filter(d => d.tmode === HVAC_MODE_COOL).reduce((acc, cur) => acc + cur.total_runtime_hr, 0) * 100) / 100;
@@ -48,7 +46,7 @@ const ModeBreakdownChart = ({ thermostatIp, isDarkMode, parentComponent = null, 
         };
 
         fetchData();
-    }, [thermostatIp, hostname, dayLimit, token]);
+    }, [thermostatIp, hostname, dayLimit]);
 
     const subHeaderStyle = parentComponent == null ? styles.subHeader : commonStyles.digitalLabel;
 

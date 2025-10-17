@@ -2,12 +2,10 @@ import React, { useContext } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import { HostnameContext } from "../context/HostnameContext";
-import { useAuth } from "../context/AuthContext";
 import { useThermostat } from "../context/ThermostatContext";
 import commonStyles from "../styles/commonStyles";
 
 const OverrideToggle = ({ thermostatIp, OverrideMode }) => {
-    const { token } = useAuth();
     const hostname = useContext(HostnameContext);
     const { updateOverrideMode } = useThermostat();
 
@@ -17,7 +15,7 @@ const OverrideToggle = ({ thermostatIp, OverrideMode }) => {
     ];
 
     const handleOverrideModeChange = (newMode) => {
-        updateOverrideMode(thermostatIp, newMode, hostname, token);
+        updateOverrideMode(thermostatIp, newMode, hostname);
     };
 
     return (

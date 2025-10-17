@@ -1,39 +1,38 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import apiFetch from '../utils/apiFetch';
 import { useAuth } from './AuthContext';
 import { HostnameContext } from './HostnameContext';
 
 export const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
-  const { token, logout, updateAuth } = useAuth();
+  const { authenticatedApiFetch } = useAuth();
   const hostname = useContext(HostnameContext);
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
 
   const fetchUsers = useCallback(async () => {
-    const data = await apiFetch(`${hostname}/users`, 'GET', null, token, 'Error fetching users', null, logout, updateAuth);
+    const data = await authenticatedApiFetch(`${hostname}/users`, 'GET', null, 'Error fetching users');
     setUsers(data);
-  }, [token, logout, hostname]);
+  }, [hostname, authenticatedApiFetch]);
 
   const fetchRoles = useCallback(async () => {
-    const data = await apiFetch(`${hostname}/roles`, 'GET', null, token, 'Error fetching roles', null, logout, updateAuth);
+    const data = await authenticatedApiFetch(`${hostname}/roles`, 'GET', null, 'Error fetching roles');
     setRoles(data);
-  }, [token, logout, hostname]);
+  }, [hostname, authenticatedApiFetch]);
 
   const addUser = async (form) => {
-    await apiFetch(`${hostname}/users`, 'POST', form, token, 'Error adding user', null, logout, updateAuth);
+    await authenticatedApiFetch(`${hostname}/users`, 'POST', form, 'Error adding user');
     await fetchUsers();
   };
 
   const updateUser = async (id, updates) => {
-    await apiFetch(`${hostname}/users/${id}`, 'PUT', updates, token, 'Error updating user', null, logout, updateAuth);
+    await authenticatedApiFetch(`${hostname}/users/${id}`, 'PUT', updates, 'Error updating user');
     await fetchUsers();
   };
 
   const disableUser = async (id, enabled) => {
     const enable = enabled ? 1 : 0;
-    await apiFetch(`${hostname}/users/${id}/enabled`, 'POST', { enable }, token, 'Error disabling user', null, logout, updateAuth);
+    await authenticatedApiFetch(`${hostname}/users/${id}/enabled`, 'POST', { enable }, 'Error disabling user');
     await fetchUsers();
   };
 

@@ -12,7 +12,7 @@ export const WeatherProvider = ({ children }) => {
     const [weatherData, setWeatherData] = useState(null);
     const [lastFetch, setLastFetch] = useState(null);
     const hostname = useContext(HostnameContext);
-    const { token } = useAuth();
+    const { authenticatedApiFetch } = useAuth();
 
     const fetchWeather = async (latitude, longitude) => {
         if (!latitude) latitude = WEATHER_LATITUDE;
@@ -22,11 +22,12 @@ export const WeatherProvider = ({ children }) => {
             return;
         }
         try {
-           const data = await apiFetch(
+           const data = await authenticatedApiFetch(
                 `${hostname}/weather?latitude=${latitude}&longitude=${longitude}`,
                 'GET',
                 null,
-                token
+                "Error fetching weather",
+                "Fetching weather..."
             );
             
             setWeatherData(data);

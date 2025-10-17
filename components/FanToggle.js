@@ -2,20 +2,18 @@ import React, { useContext } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import { HostnameContext } from "../context/HostnameContext";
-import { useAuth } from "../context/AuthContext";
 import { useThermostat } from "../context/ThermostatContext";
 import commonStyles from "../styles/commonStyles";
 import { HVAC_FAN_OPTIONS, HVAC_FAN_COLORS, HVAC_FAN_ICON_SIZES } from '../constants/hvac_fan';
 
 const FanToggle = ({ thermostatIp, FanMode }) => {
-    const { token } = useAuth();
     const hostname = useContext(HostnameContext);
     const { updateFanMode } = useThermostat();
 
     const modes = HVAC_FAN_OPTIONS;
 
     const handleFanModeChange = (newMode) => {
-        updateFanMode(thermostatIp, newMode, hostname, token);
+        updateFanMode(thermostatIp, newMode, hostname);
     };
 
     return (

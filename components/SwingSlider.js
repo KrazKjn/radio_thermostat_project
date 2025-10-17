@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { View, Text } from "react-native";
 import Slider from "@react-native-community/slider";
-import { useAuth } from "../context/AuthContext";
 import { HostnameContext } from "../context/HostnameContext";
 import { useThermostat } from "../context/ThermostatContext";
 import commonStyles from "../styles/commonStyles";
 
 const SwingSlider = ({ thermostatIp }) => {
-    const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const { thermostats, fetchSwingValue, updateSwingSetting } = useThermostat();
     const thermostat = thermostats[thermostatIp];
@@ -21,7 +19,7 @@ const SwingSlider = ({ thermostatIp }) => {
 
         const fetchSwing = async () => {
             try {
-                const fetchedSwingValue = await fetchSwingValue(thermostatIp, hostname, token);
+                const fetchedSwingValue = await fetchSwingValue(thermostatIp, hostname);
                 setSwingValue(fetchedSwingValue);
             } catch (error) {
                 console.error("Error fetching swing value:", error);
@@ -29,10 +27,10 @@ const SwingSlider = ({ thermostatIp }) => {
         };
 
         fetchSwing();
-    }, [thermostatIp, fetchSwingValue, hostname, token, thermostat?.swingValue]);
+    }, [thermostatIp, fetchSwingValue, hostname, thermostat?.swingValue]);
 
     const handleSlidingComplete = (value) => {
-        updateSwingSetting(thermostatIp, value, hostname, token);
+        updateSwingSetting(thermostatIp, value, hostname);
     };
 
     return (

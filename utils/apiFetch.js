@@ -1,5 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 const Logger = require('../components/Logger');
 
 const apiFetch = async (url, method = "GET", body = null, token = null, errorMessage = null, logMessage = null, logoutFn = null, updateAuthFn = null, timeout = 30000) => {
@@ -38,11 +36,6 @@ const apiFetch = async (url, method = "GET", body = null, token = null, errorMes
     const refreshedToken = response.headers.get('x-refreshed-token');
     if (refreshedToken && updateAuthFn) {
       logMessageLocal = Logger.info("Received refreshed token from server, updating storage ...", 'apiFetch', 'apiFetch');
-      try {
-        await AsyncStorage.setItem("auth_token", refreshedToken);
-      } catch (error) {
-        logMessageLocal = Logger.error(`Error saving refreshed token: ${error.message}`, 'apiFetch', 'apiFetch');
-      }
 
       // Call the provided function
       logMessageLocal = Logger.info("Updating token in memory and DB ...", 'apiFetch', 'apiFetch');

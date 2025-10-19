@@ -115,9 +115,6 @@ const ThermostatDisplay = ({
                             <Text style={commonStyles.tokenExpiration}>
                                 Expires: {formatTokenExpiration(tokenInfo?.exp)}
                             </Text>
-                            <TouchableOpacity onPress={authLogout} style={commonStyles.logoutButton}>
-                                <Text style={commonStyles.logoutButtonText}>Logout</Text>
-                            </TouchableOpacity>
                         </View>
                     </View>
 

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useContext } from "react";
 import { StyleSheet, View, Text, TouchableOpacity, Switch, ScrollView } from "react-native";
 import { HostnameContext } from "../context/HostnameContext";
-import { useAuth } from "../context/AuthContext";
 import { useThermostat } from "../context/ThermostatContext";
 import Icon from "react-native-vector-icons/Ionicons";
 import commonStyles from "../styles/commonStyles";
@@ -11,7 +10,6 @@ const weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const weekends = ["Saturday", "Sunday"];
 
 const ThermostatScheduler = ({ thermostatData }) => {
-  const { token } = useAuth();
   const hostname = useContext(HostnameContext);
   const { getSchedule, updateSchedule } = useThermostat();
   const [mode, setMode] = useState("cool"); // Toggle between "cool" and "heat"
@@ -27,7 +25,7 @@ const ThermostatScheduler = ({ thermostatData }) => {
     try {
       if (!thermostatData.thermostatInfo.ip || thermostatData.thermostatInfo.ip === "Loading ...") return;
 
-      const data = await getSchedule(thermostatData.thermostatInfo.ip, hostname, token, mode);
+      const data = await getSchedule(thermostatData.thermostatInfo.ip, hostname, mode);
       if (data) {
         const newSchedule = daysOfWeek.map((_, i) =>
           Object.values(data[i] || {}).reduce((acc, _, index, arr) => {
@@ -74,7 +72,7 @@ const ThermostatScheduler = ({ thermostatData }) => {
           }
         }
 
-      const results = await updateSchedule(thermostatData.thermostatInfo.ip, hostname, token, mode, data);
+      const results = await updateSchedule(thermostatData.thermostatInfo.ip, hostname, mode, data);
       if (!results) {
         throw new Error("Failed to update schedule");
       }

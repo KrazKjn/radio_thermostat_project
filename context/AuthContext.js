@@ -16,9 +16,45 @@ export const AuthProvider = ({ children }) => {
         checkUserSession();
     }, [hostname]);
 
+    const storeAndSetToken = async (newToken, context = 'AuthContext', caller = 'storeAndSetToken') => {
+        if (!newToken) {
+            Logger.error('Attempted to store null token', context, caller);
+            return false;
+        }
+        try {
+            await AsyncStorage.setItem("auth_token", newToken);
+            Logger.debug("Token stored in AsyncStorage", context, caller, 2);
+            setToken(newToken);
+            Logger.debug("Token set in state", context, caller, 2);
+            return true;
+        } catch (e) {
+            console.error("Failed to store token in AsyncStorage", e);
+            Logger.error(`Failed to store token in AsyncStorage: ${e.message}`, context, caller);
+            return false;
+        }
+    };
+
+    const resetToken = async () => {
+        Logger.debug('Clearing Token ...', 'AuthContext', 'resetToken', 0);
+        try {
+            await AsyncStorage.removeItem("auth_token");
+        } catch (error) {
+            Logger.error(`Clearing Token. Error: ${error.message}`, 'AuthContext', 'resetToken');
+        }
+        setToken(null);
+        setTokenInfo(null);
+        Logger.debug('Clearing Token ... Done.', 'AuthContext', 'resetToken', 0);
+    }
+
     const login = async (username, password) => {
         let logMessage = null;
         try {
+            try {
+                Logger.debug('Clearing Token.', 'AuthContext', 'login', 0);
+                await AsyncStorage.removeItem("auth_token");
+            } catch (error) {
+                Logger.error(`Clearing Token. Error: ${error.message}`, 'AuthContext', 'login');
+            }
             logMessage = Logger.debug("Resolving Hostname...", 'AuthContext', 'login', 2);
             try {
                 if (!hostname || hostname === "Loading...") {
@@ -37,15 +73,7 @@ export const AuthProvider = ({ children }) => {
                 logMessage = Logger.error(`Login attempt failed: ${error.message}`, 'AuthContext', 'login');
                 throw error;
             }
-            try {
-                await AsyncStorage.setItem("auth_token", data.token);
-                logMessage = Logger.debug("Token stored in AsyncStorage", 'AuthContext', 'login', 2);
-            } catch (e) {
-                console.error("Failed to store token in AsyncStorage", e);
-                logMessage = Logger.error(`Failed to store token in AsyncStorage: ${e.message}`, 'AuthContext', 'login');
-            }
-            logMessage = Logger.debug(JSON.stringify(data, null, 2), 'AuthContext', 'login', 0);
-            setToken(data.token);
+            storeAndSetToken(data.token, 'AuthContext', 'login');
             logMessage = Logger.debug("Token set in state", 'AuthContext', 'login', 2);
             const decoded = await apiFetch(`${hostname}/tokenInfo?token=${data.token}`, "GET");
             if (decoded) {
@@ -66,20 +94,19 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = async () => {
-        let token = null;
+        let tokenLocal = null;
         try {
-             token = await AsyncStorage.getItem("auth_token");
-            if (token) {
+            tokenLocal = await AsyncStorage.getItem("auth_token");
+            if (tokenLocal) {
                 // Sending the token in the body to logout. If the token is expired, the server can still process the logout.
-                const data = await apiFetch(`${hostname}/logout`, "POST", { token });
+                Logger.debug('Logging out user on server ...', 'AuthContext', 'logout', 0);
+                const data = await apiFetch(`${hostname}/logout`, "POST", { token: tokenLocal });
+                Logger.debug('Logging out user on server ... done', 'AuthContext', 'logout', 0);
             }
-            Logger.debug('Clearing Token.', 'AuthContext', 'logout', 0);
-            await AsyncStorage.removeItem("auth_token");
         } catch (error) {
             Logger.error(`Clearing Token. Error: ${error.message}`, 'AuthContext', 'logout');
         }
-        setToken(null);
-        setTokenInfo(null);
+        await resetToken();
         Alert.alert("Logged out", "You have been logged out successfully.");
     };
 
@@ -96,7 +123,7 @@ export const AuthProvider = ({ children }) => {
             const data = await apiFetch(`${hostname}/user`, "GET", null, storedToken);
             Logger.debug('Fetching user data.', 'AuthContext', 'checkUserSession', 0);
             if (data && data.token) {
-                setToken(data.token);
+                storeAndSetToken(data.token, 'AuthContext', 'checkUserSession');
                 const decoded = await apiFetch(`${hostname}/tokenInfo?token=${data.token}`, "GET");
                 if (decoded) {
                     setTokenInfo(decoded);
@@ -105,15 +132,11 @@ export const AuthProvider = ({ children }) => {
                 throw new Error("Invalid token format");
             }
         } catch (error) {
-            Logger.error(`Clearing Token. Error: ${error.message}`, 'AuthContext', 'checkUserSession');
-            try {
-                await AsyncStorage.removeItem("auth_token");
-            } catch (error) {
-                Logger.error(`Clearing Token. Error: ${error.message}`, 'AuthContext', 'checkUserSession');
-            }
-            setToken(null);
-            setTokenInfo(null);
+            Logger.error(`Error checking user session. Error: ${error.message}`, 'AuthContext', 'checkUserSession');
+            await resetToken();
+            return false;
         }
+        return true;
     };
 
     // Function to update both token and token info
@@ -122,10 +145,7 @@ export const AuthProvider = ({ children }) => {
             Logger.warn('No change in token detected.', 'AuthContext', 'updateAuth');
             return;  // No change
         }
-        if (newToken) {
-            Logger.debug('Updating info with new Token ...', 'AuthContext', 'updateAuth', 2);
-            setToken(newToken);
-        } else {
+        if (!newToken) {
             Logger.error('New token missing ...', 'AuthContext', 'updateAuth');
         }
         if (oldToken) {
@@ -143,14 +163,19 @@ export const AuthProvider = ({ children }) => {
                 null,
                 null,
                 null,
-                30000,
-                null  // Pass null to prevent infinite recursion
+                null,
+                30000
             );
             Logger.debug(`Calling ${hostname}/tokenInfo?token=${oldToken} ... done`, 'AuthContext', 'updateAuth', 2);
-            if (decoded) {
-                setTokenInfo(decoded);
+            if (new Date(decoded.exp * 1000) < Date.now()) {
+                Logger.error('New token is already expired!', 'AuthContext', 'updateAuth');
+            } else {
+                storeAndSetToken(newToken, 'AuthContext', 'updateAuth');
+                if (decoded) {
+                    setTokenInfo(decoded);
+                }
+                Logger.debug(`Updating token info with new token ... done`, 'AuthContext', 'updateAuth', 2);
             }
-            Logger.debug(`Updating token info with new token ... done`, 'AuthContext', 'updateAuth', 2);
         } catch (error) {
             console.error(`[AuthContext:updateAuth]: ${new Date().toString()} Error updating token info:`, error);
             Logger.error(`Error updating token info: ${error.message}`, 'AuthContext', 'updateAuth');
@@ -158,20 +183,48 @@ export const AuthProvider = ({ children }) => {
     };
 
     const authenticatedApiFetch = useCallback(async (url, method, body, errorMessage, logMessage, timeout) => {
-        if (!token) {
-            throw new Error("No authentication token available");
+        while (!token) {
+            Logger.debug('Waiting for token to load...', 'AuthContext', 'authenticatedApiFetch', 2);
+            await new Promise(resolve => setTimeout(resolve, 100)); // Wait 100ms
         }
-        return await apiFetch(
-            url,
-            method,
-            body,
-            token,
-            errorMessage,
-            logMessage,
-            logout,
-            updateAuth,
-            timeout
-        );
+        try {
+            const decoded = await apiFetch(
+                `${hostname}/tokenInfo?token=${token}`, 
+                "GET",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                30000
+            );
+            Logger.debug(`Calling ${hostname}/tokenInfo?token=${token} ... done`, 'AuthContext', 'authenticatedApiFetch', 2);
+            if (decoded) {
+                if (decoded.exp * 1000 < Date.now()) { // If token expires in less than 5 minutes
+                    Logger.info("Token expired, logging out...", 'AuthContext', 'authenticatedApiFetch');
+                    Logger.error(`Token: ${Logger.formatJSON(decoded)}`, 'AuthContext', 'authenticatedApiFetch');
+                    Logger.error(`Issued: ${new Date(decoded.iat * 1000).toLocaleString()}`, 'AuthContext', 'authenticatedApiFetch');
+                    Logger.error(`Expires: ${new Date(decoded.exp * 1000).toLocaleString()}`, 'AuthContext', 'authenticatedApiFetch');
+                    await logout();
+                    throw new Error("Authentication token expired");
+                }
+            }
+            return await apiFetch(
+                url,
+                method,
+                body,
+                token,
+                errorMessage,
+                logMessage,
+                logout,
+                updateAuth,
+                timeout
+            );
+        } catch (error) {
+            Logger.error(`Error in authenticatedApiFetch: ${error.message}`, 'AuthContext', 'authenticatedApiFetch');
+            throw error;
+        }
     }, [token, logout, updateAuth]);
 
     return (

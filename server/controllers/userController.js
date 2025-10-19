@@ -4,8 +4,8 @@ const bcrypt = require("bcryptjs");
 const getUser = async (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.split(" ")[1];
-      const session = db.prepare('SELECT * FROM user_sessions WHERE sessionToken = ?').get(token);
+      const searchToken = authHeader.split(" ")[1];
+      const session = db.prepare('SELECT * FROM user_sessions WHERE sessionToken = ?').get(searchToken);
       if (!session || session.expiresAt < Math.floor(Date.now() / 1000)) {
         return res.status(401).json({ error: "Unauthorized" });
       }

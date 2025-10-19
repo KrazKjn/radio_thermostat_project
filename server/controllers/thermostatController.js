@@ -76,6 +76,7 @@ const getThermostatData = async (req, res) => {
             }
         }
 
+        Logger.debug(`Received GET response: ${req.url}: ${Logger.formatJSON(data)}`, 'ThermostatController', 'getThermostatData', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error fetching data for IP ${ip}: ${error.message}`, 'ThermostatController', 'getThermostatData');
@@ -130,6 +131,7 @@ const updateThermostat = async (req, res) => {
 
         const data2 = await response2.json();
 
+        Logger.debug(`Received POST response: ${req.url}: ${Logger.formatJSON(data)}`, 'ThermostatController', 'updateThermostat', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error Updating for IP ${ip}: ${error.message}`, 'ThermostatController', 'updateThermostat');
@@ -152,6 +154,7 @@ const getModel = async (req, res) => {
         ip = req.params.ip;
         const response = await fetch(`http://${ip}/tstat/model`);
         const data = await response.json();
+        Logger.debug(`Received GET response: ${req.url}: ${Logger.formatJSON(data)}`, 'ThermostatController', 'getModel', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error getting model for IP ${ip}: ${error.message}`, 'ThermostatController', 'getModel');
@@ -166,6 +169,7 @@ const getName = async (req, res) => {
         ip = req.params.ip;
         const response = await fetch(`http://${ip}/sys/name`);
         const data = await response.json();
+        Logger.debug(`Received GET response: ${req.url}: ${Logger.formatJSON(data)}`, 'ThermostatController', 'getName', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error getting name for IP ${ip}: ${error.message}`, 'ThermostatController', 'getName');
@@ -180,6 +184,7 @@ const getSwing = async (req, res) => {
         ip = req.params.ip;
         const response = await fetch(`http://${ip}/tstat/tswing`);
         const data = await response.json();
+        Logger.debug(`Received GET response: ${req.url}: ${Logger.formatJSON(data)}`, 'ThermostatController', 'getSwing', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error getting swing for IP ${ip}: ${error.message}`, 'ThermostatController', 'getSwing');
@@ -292,6 +297,7 @@ const getSchedule = async (req, res) => {
         if (!response.ok) throw new Error("Failed to fetch data from thermostat");
 
         const data = await response.json();
+        Logger.debug(`Received GET response: ${req.url}: ${Logger.formatJSON(data)}`, 'ThermostatController', 'getSchedule', 1);
         res.json(data);
     } catch (error) {
         console.error("Error:", error);
@@ -319,6 +325,7 @@ const getCloud = async (req, res) => {
             data.source = cache[ip].source;
         }
 
+        Logger.debug(`Received GET response: ${req.url}: ${Logger.formatJSON(data)}`, 'ThermostatController', 'getCloud', 1);
         res.json(data);
     } catch (error) {
         console.error("Error:", error);
@@ -348,7 +355,7 @@ const updateName = async (req, res) => {
         });
   
         const data = await response.json();
-        Logger.debug(`POST response: ${JSON.stringify(data, null, 2)}`, 'ThermostatController', 'updateName', 1);
+        Logger.debug(`POST response: ${Logger.formatJSON(data)}`, 'ThermostatController', 'updateName', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error updating name for IP ${ip}: ${error.message}`, 'ThermostatController', 'updateName');
@@ -373,7 +380,7 @@ const rebootServer = async (req, res) => {
         });
 
         const data = await response.json();
-        Logger.debug(`POST response: ${JSON.stringify(data, null, 2)}`, 'ThermostatController', 'rebootServer', 1);
+        Logger.debug(`POST response: ${Logger.formatJSON(data)}`, 'ThermostatController', 'rebootServer', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error rebooting thermostat for IP ${ip}: ${error.message}`, 'ThermostatController', 'rebootServer');
@@ -402,7 +409,7 @@ const updateSwing = async (req, res) => {
         });
   
         const data = await response.json();
-        Logger.debug(`POST response: ${JSON.stringify(data, null, 2)}`, 'ThermostatController', 'updateSwing', 1);
+        Logger.debug(`POST response: ${Logger.formatJSON(data)}`, 'ThermostatController', 'updateSwing', 1);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error updating tswing for IP ${ip}: ${error.message}`, 'ThermostatController', 'updateSwing');
@@ -447,7 +454,7 @@ const updateSchedule = async (req, res) => {
         });
     
         const respData = await response.json();
-        Logger.debug(`POST response: ${JSON.stringify(respData, null, 2)}`, 'ThermostatController', 'updateSchedule', 1);
+        Logger.debug(`POST response: ${Logger.formatJSON(respData)}`, 'ThermostatController', 'updateSchedule', 1);
         res.json(respData);
     } catch (error) {
         console.error("Error: ", error);
@@ -488,7 +495,7 @@ const updateScheduleDay = async (req, res) => {
         });
     
         const respData = await response.json();
-        Logger.debug(`POST response: ${JSON.stringify(respData)}`, 'ThermostatController', 'updateScheduleDay', 1);
+        Logger.debug(`POST response: ${Logger.formatJSON(respData)}`, 'ThermostatController', 'updateScheduleDay', 1);
         res.json(respData);
     } catch (error) {
         console.error("Error: ", error);
@@ -850,7 +857,7 @@ const updateWeatherData = async () => {
                         `);
                         fallbackStmt.run(temperature, cloudCover, rainAccumulation, rainIntensity, humidity);
                         Logger.debug(`Cached Weather data saved to latest row: => temp: ${temperature}, cloud cover: ${cloudCover}, rainAccumulation: ${rainAccumulation}, rainIntensity: ${rainIntensity}, humidity: ${humidity}`, 'thermostatController', 'updateWeatherData', 1);
-                        return { temperature, cloudCover };
+                        return { temperature, cloudCover, rainAccumulation, rainIntensity, humidity};
                     }
                 }
                 catch (error) {

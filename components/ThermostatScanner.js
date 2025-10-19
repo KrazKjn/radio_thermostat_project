@@ -84,7 +84,17 @@ const ThermostatScanner = () => {
     for (let i = 20; i <= 30; i++) {
       const ip = `${subnet}.${i}`;
       try {
-        const data = await apiFetch(`${hostname}/thermostat/${ip}`, "GET", null, token, "Error fetching thermostat data", "Fetching cached thermostat data...", logout, updateAuth, 3000);
+        const data = await apiFetch(
+          `${hostname}/thermostat/${ip}`,
+          "GET",
+          null,
+          token,
+          "Error fetching thermostat data",
+          "Fetching cached thermostat data...",
+          logout,
+          updateAuth,
+          3000
+        );
         if (data && data.model) {
             foundDevices.push({ ip, model: data.model, name: data.name });
         }
@@ -108,7 +118,7 @@ const ThermostatScanner = () => {
 
     let foundDevices = [];
     setDevices(foundDevices);
-    const thermostatScan = await scanForThermostats(hostname, token, subnet);
+    const thermostatScan = await scanForThermostats(hostname, subnet);
     if (thermostatScan !== undefined || thermostatScan != null) {
       const devices = JSON.parse(thermostatScan);
       if (devices.length > 0) {
@@ -150,7 +160,7 @@ const ThermostatScanner = () => {
   const addThermostatToSystem = async (device) => {
     // Function to add thermostat
     console.log("Add thermostat:", device);
-    const modelInfo = await fetchModelInfoDetailed(device.ip, hostname, token);
+    const modelInfo = await fetchModelInfoDetailed(device.ip, hostname);
     const uuid = modelInfo.sys.uuid;
     const ip = device.ip;
     const model = device.model;
@@ -160,7 +170,7 @@ const ThermostatScanner = () => {
     const scanInterval = modelInfo.cloud.interval;
     const scanMode = modelInfo.cloud.enabled ? 2 : 1;
 
-    addThermostat(hostname, token, {
+    addThermostat(hostname, {
       uuid,
       ip,
       model,

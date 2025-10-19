@@ -956,7 +956,7 @@ export const ThermostatProvider = ({ children }) => {
     }
   };
   
-const getHourlyRuntime = async (thermostatIp, hostname, hours = -1) => {
+  const getHourlyRuntime = async (thermostatIp, hostname, hours = -1) => {
     /* Fetch hourly runtime data */ 
     try {
         const response = await authenticatedApiFetch(
@@ -1087,63 +1087,63 @@ const getHourlyRuntime = async (thermostatIp, hostname, hours = -1) => {
         console.error(`Error fetching hourly cycles data: ${thermostatIp}`, error);
         throw error;
       }
-    };
-
-    return (
-      <ThermostatContext.Provider
-          value={{
-              thermostats,
-              getThermostats,
-              addThermostat,
-              updateThermostat,
-              disableThermostat,
-              scanForThermostats,
-              addThermostatInState,
-              removeThermostatFromState,
-              updateThermostatState,
-              fetchThermostatData,
-              getCurrentTemperature,
-              updateThermostatName,
-              rebootThermostatServer,
-              updateThermostatTargetTemperature,
-              fetchModelInfo,
-              fetchModelInfoDetailed,
-              fetchModelInfoList,
-              fetchThermostatName,
-              updateThermostatTime, // Expose the function
-              updateThermostatMode, // Expose the function
-              updateFanMode, // Expose the function
-              updateHoldMode, // Expose the function
-              updateOverrideMode, // Expose the function
-              fetchSwingValue, // Expose fetchSwingValue
-              updateSwingSetting, // Expose updateSwingSetting
-              fetchCachedData,
-              startScanner,
-              stopScanner,
-              restartScanner,
-              getScannerStatus,
-              fetchScannedData,
-              scannerStatus,
-              formatTime,
-              formatCurrentTime,
-              isTokenExpired,
-              getSchedule,
-              updateSchedule,
-              getCloudSettings,
-              updateCloudSettings,
-              getDailyRuntime,
-              getHourlyRuntime,
-              getHourlyEnv,
-              getTempVsRuntime,
-              getDailyModeRuntime,
-              getFanVsHvacDaily,
-              getDailyCycles,
-              getHourlyCycles,
-          }}
-      >
-          {children}
-      </ThermostatContext.Provider>
-    );
   };
 
-  export const useThermostat = () => useContext(ThermostatContext);
+  return (
+    <ThermostatContext.Provider
+        value={{
+            thermostats,
+            getThermostats,
+            addThermostat,
+            updateThermostat,
+            disableThermostat,
+            scanForThermostats,
+            addThermostatInState,
+            removeThermostatFromState,
+            updateThermostatState,
+            fetchThermostatData,
+            getCurrentTemperature,
+            updateThermostatName,
+            rebootThermostatServer,
+            updateThermostatTargetTemperature,
+            fetchModelInfo,
+            fetchModelInfoDetailed,
+            fetchModelInfoList,
+            fetchThermostatName,
+            updateThermostatTime, // Expose the function
+            updateThermostatMode, // Expose the function
+            updateFanMode, // Expose the function
+            updateHoldMode, // Expose the function
+            updateOverrideMode, // Expose the function
+            fetchSwingValue, // Expose fetchSwingValue
+            updateSwingSetting, // Expose updateSwingSetting
+            fetchCachedData,
+            startScanner,
+            stopScanner,
+            restartScanner,
+            getScannerStatus,
+            fetchScannedData,
+            scannerStatus,
+            formatTime,
+            formatCurrentTime,
+            isTokenExpired,
+            getSchedule,
+            updateSchedule,
+            getCloudSettings,
+            updateCloudSettings,
+            getDailyRuntime,
+            getHourlyRuntime,
+            getHourlyEnv,
+            getTempVsRuntime,
+            getDailyModeRuntime,
+            getFanVsHvacDaily,
+            getDailyCycles,
+            getHourlyCycles,
+        }}
+    >
+        {children}
+    </ThermostatContext.Provider>
+  );
+};
+
+export const useThermostat = () => useContext(ThermostatContext);

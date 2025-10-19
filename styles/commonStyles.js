@@ -440,18 +440,6 @@ const commonStyles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'monospace',
   },
-  logoutButton: {
-    marginTop: 5,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    backgroundColor: '#dc3545',
-    borderRadius: 5,
-  },
-  logoutButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontFamily: 'monospace',
-  },
 });
 
 export default commonStyles;

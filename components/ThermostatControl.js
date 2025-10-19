@@ -7,7 +7,7 @@ import { useThermostat } from "../context/ThermostatContext";
 import commonStyles from "../styles/commonStyles";
 
 const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
-    const { token, logout, updateAuth } = useAuth();
+    const { logout } = useAuth();
     const hostname = useContext(HostnameContext);
     const {
         thermostats,
@@ -45,11 +45,11 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
                 thermostatInfo: { ip: thermostatIp, model: "Loading ...", name: "Loading ..." },
             });
         } else {
-            getCurrentTemperature(thermostatIp, hostname, token);
+            getCurrentTemperature(thermostatIp, hostname);
             if (thermostat.autoRefresh) {
                 const interval = setInterval(() => {
                     console.log(`[ThermostatControl] ${Date().toString()}: Timer triggered, refreshing temperature`);
-                    getCurrentTemperature(thermostatIp, hostname, token);
+                    getCurrentTemperature(thermostatIp, hostname);
                 }, thermostat.refreshInterval * 60 * 1000);
 
                 return () => clearInterval(interval);
@@ -92,7 +92,6 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
                         <ThermostatDisplay
                             thermostat={thermostat}
                             thermostatIp={thermostatIp}
-                            token={token}
                             logout={logout}
                             hostname={hostname}
                             getCurrentTemperature={getCurrentTemperature}

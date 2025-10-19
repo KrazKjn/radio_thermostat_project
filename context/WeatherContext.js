@@ -7,12 +7,13 @@ const Logger = require('../components/Logger');
 const WeatherContext = createContext();
 const WEATHER_LATITUDE = 29.8238;
 const WEATHER_LONGITUDE = -90.4751;
+const WEATHER_REFRESH_MINUTES = 5;
 
 export const WeatherProvider = ({ children }) => {
     const [weatherData, setWeatherData] = useState(null);
     const [lastFetch, setLastFetch] = useState(null);
     const hostname = useContext(HostnameContext);
-    const { token } = useAuth();
+    const { token, authenticatedApiFetch } = useAuth();
 
     const fetchWeather = async (latitude, longitude) => {
         if (!latitude) latitude = WEATHER_LATITUDE;
@@ -21,12 +22,17 @@ export const WeatherProvider = ({ children }) => {
             console.warn('Invalid latitude or longitude');
             return;
         }
+        if (!token) {
+            Logger.warn('Skipping weather fetch: token not available', 'WeatherContext', 'fetchWeather');
+            return;
+        }        
         try {
-           const data = await apiFetch(
+           const data = await authenticatedApiFetch(
                 `${hostname}/weather?latitude=${latitude}&longitude=${longitude}`,
                 'GET',
                 null,
-                token
+                "Error fetching weather",
+                "Fetching weather..."
             );
             
             setWeatherData(data);
@@ -41,10 +47,16 @@ export const WeatherProvider = ({ children }) => {
 
     // Fetch weather data every 5 minutes
     useEffect(() => {
-        fetchWeather();
-        const interval = setInterval(fetchWeather, 5 * 60 * 1000);
+        if (!token) return; // Wait until token is available
+
+        fetchWeather(); // Initial fetch
+
+        const interval = setInterval(() => {
+            fetchWeather();
+        }, WEATHER_REFRESH_MINUTES * 60 * 1000);
+
         return () => clearInterval(interval);
-    }, [token, hostname]);
+    }, [hostname, token]); // Re-run when token updates
 
     return (
         <WeatherContext.Provider value={{ weatherData, lastFetch, fetchWeather }}>

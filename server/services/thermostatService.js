@@ -4,6 +4,7 @@ const arp = require('node-arp');
 const snmp = require("net-snmp");
 const axios = require("axios");
 const Logger = require('../../components/Logger');
+const authService = require('../services/authService');
 const weatherService = require('../services/weatherService');
 const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
 
@@ -186,16 +187,19 @@ async function scannerIntervalTask(ip) {
         const thermostat_id = getIdByIP(ip);
         let currentTime = Date.now();
         let data = undefined;
+
         if (scanMode !== undefined && scanMode === 0) {
             console.error("Error: Thermostat scan mode is 0 (Disabled) for IP:", ip);
             Logger.warn(`Thermostat scan mode is 0 (Disabled) for IP: ${ip}`, 'thermostatService', 'scannerIntervalTask');
             return;
         }
+        Logger.info(`Scanning thermostat at ${ip} with scanMode: ${scanMode} ...`, 'thermostatService', 'scannerIntervalTask');
         if (scanMode === undefined || scanMode === 1) {
             // Always get a valid service token
-            const token = getValid();
-            const headers = { "Authorization": `Bearer ${token}` };
+            const serviceToken = authService.getValidServiceToken();
+            const headers = { "Authorization": `Bearer ${serviceToken}` };
 
+            Logger.debug(`Fetching data from thermostat at ${ip} with service token: ${serviceToken} ...`, 'thermostatService', 'scannerIntervalTask', 2);
             const response = await fetch(`http://localhost:${process.env.PORT || 5000}/tstat/${ip}`, {
                 method: "GET",
                 headers

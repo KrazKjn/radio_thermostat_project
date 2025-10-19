@@ -5,16 +5,16 @@ const RENEW_WITHIN_MINUTES = 15;
 
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers["authorization"];
-    const token = authHeader && authHeader.split(" ")[1]; // Extract token from "Bearer <token>"
+    const extractedToken = authHeader && authHeader.split(" ")[1]; // Extract token from "Bearer <token>"
 
-    if (!token) Logger.warn("Unauthorized (401): No token provided", 'auth', 'authenticateToken');
-    if (!token) return res.status(401).json({ error: "Unauthorized: No token provided" });
+    if (!extractedToken) Logger.warn("Unauthorized (401): No token provided", 'auth', 'authenticateToken');
+    if (!extractedToken) return res.status(401).json({ error: "Unauthorized: No token provided" });
 
-    jwt.verify(token, SECRET_KEY, (err, user) => {
+    jwt.verify(extractedToken, SECRET_KEY, (err, user) => {
         if (err) {
-            Logger.error("Forbidden (403): Forbidden: Invalid token", 'auth', 'authenticateToken');
+            Logger.error(`Forbidden (403): Forbidden: Invalid token: ${extractedToken}`, 'auth', 'authenticateToken');
             Logger.error(`Error: ${err.message}`, 'auth', 'authenticateToken');
-            const decoded = jwt.decode(token);
+            const decoded = jwt.decode(extractedToken);
             Logger.error(`Token: ${Logger.formatJSON(decoded)}`, 'auth', 'authenticateToken');
             Logger.error(`Issued: ${new Date(decoded.iat * 1000).toLocaleString()}`, 'auth', 'authenticateToken');
             Logger.error(`Expires: ${new Date(decoded.exp * 1000).toLocaleString()}`, 'auth', 'authenticateToken');

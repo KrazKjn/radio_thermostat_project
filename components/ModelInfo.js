@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useContext } from "react";
 import { View, Text, ActivityIndicator, FlatList } from "react-native";
 import { HostnameContext } from "../context/HostnameContext";
-import { useAuth } from "../context/AuthContext";
 import { useThermostat } from "../context/ThermostatContext";
 import commonStyles from "../styles/commonStyles";
 
 const ModelInfo = ({ ipList }) => {
-    const { token } = useAuth();
     const hostname = useContext(HostnameContext);
     const { fetchModelInfoList } = useThermostat();
     const [devices, setDevices] = useState([]);
@@ -22,7 +20,7 @@ const ModelInfo = ({ ipList }) => {
     const fetchDevices = async () => {
         try {
             setLoading(true);
-            const fetchedDevices = await fetchModelInfoList(ipList, hostname, token);
+            const fetchedDevices = await fetchModelInfoList(ipList, hostname);
             setDevices(fetchedDevices);
         } catch (error) {
             setErrorMessage("Failed to fetch device information.");

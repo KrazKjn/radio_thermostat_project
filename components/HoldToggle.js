@@ -2,12 +2,10 @@ import React, { useContext } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import { HostnameContext } from "../context/HostnameContext";
-import { useAuth } from "../context/AuthContext";
 import { useThermostat } from "../context/ThermostatContext";
 import commonStyles from "../styles/commonStyles";
 
 const HoldToggle = ({ thermostatIp, HoldMode }) => {
-    const { token } = useAuth();
     const hostname = useContext(HostnameContext);
     const { updateHoldMode } = useThermostat();
 
@@ -17,7 +15,7 @@ const HoldToggle = ({ thermostatIp, HoldMode }) => {
     ];
 
     const handleHoldModeChange = (newMode) => {
-        updateHoldMode(thermostatIp, newMode, hostname, token);
+        updateHoldMode(thermostatIp, newMode, hostname);
     };
 
     return (

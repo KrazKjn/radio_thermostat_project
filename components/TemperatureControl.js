@@ -1,12 +1,10 @@
 import React, { useContext, useState } from "react";
 import { View, Text, TouchableOpacity, Alert } from "react-native";
 import { HostnameContext } from "../context/HostnameContext";
-import { useAuth } from "../context/AuthContext";
 import { useThermostat } from "../context/ThermostatContext";
 import commonStyles from "../styles/commonStyles";
 
 const TemperatureControl = ({ thermostatIp, thermostat }) => {
-    const { token } = useAuth();
     const hostname = useContext(HostnameContext);
     const { updateThermostatState, updateThermostatTargetTemperature } = useThermostat();
     const [localTemp, setLocalTemp] = useState(thermostat.targetTemp);
@@ -26,7 +24,6 @@ const TemperatureControl = ({ thermostatIp, thermostat }) => {
             await updateThermostatTargetTemperature(
                 thermostatIp,
                 hostname,
-                token,
                 thermostat.currentTempMode,
                 localTemp
             );

@@ -6,6 +6,8 @@ const SECRET_KEY = process.env.SECRET_KEY || "your_secret_key";
 
 const login = async (req, res) => {
     const { username, password } = req.body;
+    const sourceIP = req.ip || req.connection.remoteAddress;
+    Logger.info(`Login attempt for username: ${username} from IP: ${sourceIP}`, 'AuthController', 'login');
     const row = db.prepare('SELECT COUNT(*) as count FROM users').get();
     if (row.count === 0) {
       // No users exist, create the first admin user
@@ -27,10 +29,13 @@ const login = async (req, res) => {
 
     const user = getUserStmt.get(username);
     if (!user) {
+      Logger.warn(`Invalid credentials for username: ${username} from IP: ${sourceIP}`, 'AuthController', 'login');
       return res.status(401).json({ error: "Invalid credentials" });
     }
+    Logger.info(`User found for username: ${username}`, 'AuthController', 'login');
 
     if (!bcrypt.compareSync(password, user.password)) {
+      Logger.warn(`Invalid password for username: ${username} from IP: ${sourceIP}`, 'AuthController', 'login');
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -57,7 +62,7 @@ const login = async (req, res) => {
 
     if (existingSession) {
       token = existingSession.sessionToken;
-      Logger.info(`Reusing valid session token expiring at ${existingSession.expiresAt}`, 'AuthController', 'login');
+      Logger.info(`Reusing valid session token expiring at ${new Date(existingSession.expiresAt * 1000).toString()}: token: ${token}`, 'AuthController', 'login');
     } else {
       // Create new JWT token
       token = jwt.sign({ username: user.username, role: user.role }, SECRET_KEY, { expiresIn: expiresInSec });
@@ -68,7 +73,7 @@ const login = async (req, res) => {
         VALUES (?, ?, ?, ?)
       `).run(user.id, token, now, expiresAt);
 
-      Logger.info(`Created new session token expiring at ${new Date(expiresAt * 1000).toString()}`, 'AuthController', 'login');
+      Logger.info(`Created new session token expiring at ${new Date(expiresAt * 1000).toString()}: ${token}`, 'AuthController', 'login');
     }
 
     res.status(200).json({ token, user: { username: user.username, role: user.role } });

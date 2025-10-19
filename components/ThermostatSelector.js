@@ -2,13 +2,11 @@ import React, { useContext, useState, useEffect } from "react";
 import { View, Text, ScrollView, Button, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
 import { NetworkInfo } from "react-native-network-info";
 import { HostnameContext } from "../context/HostnameContext";
-import { useAuth } from "../context/AuthContext";
 import { useThermostat } from "../context/ThermostatContext";
 import ThermostatControl from "./ThermostatControl";
 import commonStyles from "../styles/commonStyles";
 
 const ThermostatSelector = () => {
-  const { token, logout, updateAuth } = useAuth();
   const hostname = useContext(HostnameContext);
   const data = { temp: "🔍", tmode: 0, fmode: 0, override: 0, hold: 0, t_cool: "🔍", t_heat: "🔍", tstate: 0, fstate: 0, time: { day: 0, hour: 0, minute: 0 } };
   const [subnet, setSubnet] = useState("");
@@ -61,7 +59,7 @@ const ThermostatSelector = () => {
     fetchIPAddress();
     
     const fetchData = async () => {
-      const definedThermostats = await getThermostats(hostname, token);
+      const definedThermostats = await getThermostats(hostname);
       // Testing
       //if (false && definedThermostats.length > 0) {
       if (definedThermostats !== undefined && definedThermostats.length > 0) {
@@ -76,7 +74,7 @@ const ThermostatSelector = () => {
           console.warn("Subnet not detected. Unable to scan.");
           return;
         }
-        const thermostatScan = await scanForThermostats(hostname, token, subnet);
+        const thermostatScan = await scanForThermostats(hostname, subnet);
         if (thermostatScan.length > 0) {
           console.log(thermostatScan);
           setThermostats(thermostatScan);
@@ -104,7 +102,7 @@ const ThermostatSelector = () => {
       return;
     }
 
-    const thermostatScan = await scanForThermostats(hostname, token, subnet);
+    const thermostatScan = await scanForThermostats(hostname, subnet);
     if (thermostatScan.length > 0) {
       setThermostats(thermostatScan);
       console.log(thermostatScan);
@@ -119,7 +117,7 @@ const ThermostatSelector = () => {
         <View style={[commonStyles.digitalCard, { alignItems: "center" }]}>
           <ActivityIndicator size="large" color="#7A7AFF" />
           <Text style={{ color: "#7A7AFF" }}>⏳ Waiting for thermostats...</Text>
-          <TouchableOpacity onPress={() => getThermostats(hostname, token)}>
+          <TouchableOpacity onPress={() => getThermostats(hostname)}>
             <Text style={{ color: "#007AFF", marginTop: 10 }}>Refresh</Text>
           </TouchableOpacity>
         </View>

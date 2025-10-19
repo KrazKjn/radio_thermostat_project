@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, useWindowDimensions, TouchableOpacity } from 'r
 import { VictoryChart, VictoryBar, VictoryAxis, VictoryTheme, VictoryTooltip } from 'victory';
 import { Picker } from '@react-native-picker/picker';
 import { useThermostat } from '../context/ThermostatContext';
-import { useAuth } from '../context/AuthContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
 import commonStyles from '../styles/commonStyles';
@@ -57,7 +56,6 @@ const mapHourlyData = (hourlyJson, costPerKwH, KwHDraw) =>
 });
 
 const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange }) => {
-    const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const { getThermostats, getDailyRuntime, getHourlyRuntime } = useThermostat();
     const [dailyData, setDailyData] = useState([]);
@@ -75,7 +73,7 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const definedThermostats = await getThermostats(hostname, token);
+                const definedThermostats = await getThermostats(hostname);
                 setThermostats(definedThermostats || []);
 
                 const thermostat = definedThermostats?.find(t => t.ip === thermostatIp);
@@ -83,8 +81,8 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
                 const KwHDraw = calculateKwHDraw(thermostat?.rla, voltage);
 
                 const [dailyJson, hourlyJson] = await Promise.all([
-                    getDailyRuntime(thermostatIp, hostname, dayLimit, token),
-                    getHourlyRuntime(thermostatIp, hostname, hourLimit, token)
+                    getDailyRuntime(thermostatIp, hostname, dayLimit),
+                    getHourlyRuntime(thermostatIp, hostname, hourLimit)
                 ]);
 
                 if (Array.isArray(dailyJson)) {
@@ -112,7 +110,7 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
         };
 
         fetchData();
-    }, [thermostatIp, hostname, dayLimit, hourLimit, token, costPerKwH, viewMode]);
+    }, [thermostatIp, hostname, dayLimit, hourLimit, costPerKwH, viewMode]);
     
     const subHeaderStyle = parentComponent == null ? styles.subHeader : commonStyles.digitalLabel;
 

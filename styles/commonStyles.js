@@ -427,6 +427,19 @@ const commonStyles = StyleSheet.create({
       marginVertical: 4,
       gap: 10,
   },
+  userInfoContainer: {
+    alignItems: 'flex-end',
+  },
+  userName: {
+    color: '#0ff',
+    fontSize: 18,
+    fontFamily: 'monospace',
+  },
+  tokenExpiration: {
+    color: '#aaa',
+    fontSize: 12,
+    fontFamily: 'monospace',
+  },
 });
 
 export default commonStyles;

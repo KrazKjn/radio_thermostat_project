@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { VictoryChart, VictoryScatter, VictoryAxis, VictoryTheme } from 'victory';
 import { useThermostat } from "../context/ThermostatContext";
-import { useAuth } from '../context/AuthContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
 import commonStyles from "../styles/commonStyles";
@@ -11,7 +10,6 @@ import withExport from './withExport';
 const Logger = require('./Logger');
 
 const TempCorrelationChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange }) => {
-    const { token } = useAuth();
     const hostname = React.useContext(HostnameContext);
     const { getTempVsRuntime } = useThermostat();
     const [chartData, setChartData] = useState([]);
@@ -23,7 +21,7 @@ const TempCorrelationChart = ({ thermostatIp, isDarkMode, parentComponent = null
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const json = await getTempVsRuntime(thermostatIp, hostname, token);
+                const json = await getTempVsRuntime(thermostatIp, hostname);
                 if (json) {
                     const data = json.map(d => ({
                         x: d.avg_target_temp,
@@ -43,7 +41,7 @@ const TempCorrelationChart = ({ thermostatIp, isDarkMode, parentComponent = null
         };
 
         fetchData();
-    }, [thermostatIp, hostname, token]);
+    }, [thermostatIp, hostname]);
 
     const subHeaderStyle = parentComponent == null ? styles.subHeader : commonStyles.digitalLabel;
 

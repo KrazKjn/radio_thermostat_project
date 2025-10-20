@@ -48,13 +48,13 @@ const App = () => {
       <HostnameProvider>
         <AuthProvider>
           <UserProvider>
-            <WeatherProvider>
-              <ThermostatProvider>
-                <DataRefreshProvider>
+            <DataRefreshProvider>
+              <WeatherProvider>
+                <ThermostatProvider>
                   <AppContent />
-                </DataRefreshProvider>
-              </ThermostatProvider>
+                </ThermostatProvider>
               </WeatherProvider>
+            </DataRefreshProvider>
           </UserProvider>
         </AuthProvider>
       </HostnameProvider>

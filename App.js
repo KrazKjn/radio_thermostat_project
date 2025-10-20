@@ -1,5 +1,6 @@
 import React, { useContext } from "react";
 import { Alert, Text, View, SafeAreaView, Platform } from "react-native";
+import { NavigationContainer } from '@react-navigation/native';
 import ThermostatSelector from "./components/ThermostatSelector";
 import { HostnameContext, HostnameProvider } from "./context/HostnameContext";
 import { useAuth, AuthProvider } from "./context/AuthContext";
@@ -43,19 +44,21 @@ const App = () => {
   const hostname = useContext(HostnameContext);
 
   return (
-    <HostnameProvider>
-      <AuthProvider>
-        <UserProvider>
-          <WeatherProvider>
-            <ThermostatProvider>
-              <DataRefreshProvider>
-                <AppContent />
-              </DataRefreshProvider>
-            </ThermostatProvider>
-            </WeatherProvider>
-        </UserProvider>
-      </AuthProvider>
-    </HostnameProvider>
+    <NavigationContainer>
+      <HostnameProvider>
+        <AuthProvider>
+          <UserProvider>
+            <WeatherProvider>
+              <ThermostatProvider>
+                <DataRefreshProvider>
+                  <AppContent />
+                </DataRefreshProvider>
+              </ThermostatProvider>
+              </WeatherProvider>
+          </UserProvider>
+        </AuthProvider>
+      </HostnameProvider>
+    </NavigationContainer>
   );
 };
 

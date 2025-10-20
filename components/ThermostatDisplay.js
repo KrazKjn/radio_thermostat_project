@@ -35,7 +35,6 @@ const ThermostatDisplay = ({
     const { register, unregister } = useContext(DataRefreshContext);
     const showTempControlModes = new Set([1, 2]);
     const showMenu = true;
-    const intervalRef = useRef();
 
     const formatTokenExpiration = (exp) => {
         if (!exp) return 'N/A';

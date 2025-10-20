@@ -8,6 +8,7 @@ const Logger = require('../components/Logger');
 const WeatherContext = createContext();
 const WEATHER_LATITUDE = 29.8238;
 const WEATHER_LONGITUDE = -90.4751;
+const WEATHER_REFRESH_MINUTES = 5;
 
 export const WeatherProvider = ({ children }) => {
     const [weatherData, setWeatherData] = useState(null);
@@ -50,11 +51,19 @@ export const WeatherProvider = ({ children }) => {
         const listenerId = 'WeatherContext-fetchWeather';
         if (!token) return; // Wait until token is available
 
-        fetchWeather(); // Initial fetch
-        register(listenerId, fetchWeather);
+        const handleRefresh = () => {
+            const now = Date.now();
+            if (!lastFetch || (now - lastFetch > WEATHER_REFRESH_MINUTES * 60 * 1000)) {
+                Logger.info('Fetching new weather data.', 'WeatherContext', 'handleRefresh');
+                fetchWeather();
+            }
+        };
+
+        handleRefresh(); // Initial fetch
+        register(listenerId, handleRefresh);
 
         return () => unregister(listenerId);
-    }, [hostname, token, register, unregister]); // Re-run when token updates
+    }, [hostname, token, register, unregister, lastFetch]); // Re-run when token updates
 
     return (
         <WeatherContext.Provider value={{ weatherData, lastFetch, fetchWeather }}>

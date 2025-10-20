@@ -22,6 +22,7 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
     const { width: windowWidth } = useWindowDimensions();
     const chartWidth = Math.max( (parentComponent !== null ? parentComponent.innerWidth - 150 : windowWidth - 40), 320);
     const chartColors = getChartColors(isDarkMode);
+    const lastRefreshTimeRef = useRef(null);
 
     const fetchData = async () => {
         try {
@@ -57,10 +58,24 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
 
     useEffect(() => {
         const listenerId = `LiveChart-${thermostatIp}`;
+        const handleRefresh = () => {
+            const now = Date.now();
+            const intervalMs = interval * 60 * 1000;
+
+            if (!lastRefreshTimeRef.current) {
+                lastRefreshTimeRef.current = now;
+            }
+
+            if (now - lastRefreshTimeRef.current >= intervalMs) {
+                Logger.info('Fetching new chart data.', 'LiveChart', 'handleRefresh');
+                fetchData();
+                lastRefreshTimeRef.current = now;
+            }
+        };
         fetchData();
-        register(listenerId, fetchData);
+        register(listenerId, handleRefresh);
         return () => unregister(listenerId);
-    }, [thermostatIp, register, unregister]);
+    }, [thermostatIp, register, unregister, interval]);
 
     const handleToggleChange = async (value) => {
         setIsScannerOn(value);

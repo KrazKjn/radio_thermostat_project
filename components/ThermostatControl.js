@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState, useRef } from "react";
 import { View, ScrollView, Text, ActivityIndicator } from "react-native";
 import ThermostatDisplay from "./ThermostatDisplay";
 import { HostnameContext } from "../context/HostnameContext";
@@ -21,11 +21,13 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
     const { register, unregister } = useContext(DataRefreshContext);
     const thermostat = thermostats[thermostatIp];
     const [menuOpen, setMenuOpen] = useState(false);
+    const lastRefreshTimeRef = useRef(null);
 
     useEffect(() => {
         if (!hostname) return;
 
         const thermostat = thermostats[thermostatIp];
+        const listenerId = `ThermostatControl-${thermostatIp}`;
 
         if (!thermostat) {
             addThermostatInState(thermostatIp, {
@@ -50,14 +52,24 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
             getCurrentTemperature(thermostatIp, hostname);
             if (thermostat.autoRefresh) {
                 const refreshFunc = () => {
-                    console.log(`[ThermostatControl] ${Date().toString()}: Timer triggered, refreshing temperature`);
-                    getCurrentTemperature(thermostatIp, hostname);
-                };
-                register(thermostatIp, refreshFunc);
+                    const now = Date.now();
+                    const intervalMs = thermostat.refreshInterval * 60 * 1000;
 
-                return () => unregister(thermostatIp);
+                    if (!lastRefreshTimeRef.current) {
+                        lastRefreshTimeRef.current = now;
+                    }
+
+                    if (now - lastRefreshTimeRef.current >= intervalMs) {
+                        console.log(`[ThermostatControl] ${new Date().toString()}: Timer triggered, refreshing temperature`);
+                        getCurrentTemperature(thermostatIp, hostname);
+                        lastRefreshTimeRef.current = now;
+                    }
+                };
+                register(listenerId, refreshFunc);
             }
         }
+
+        return () => unregister(listenerId);
     }, [thermostatIp, addThermostatInState, hostname, thermostat?.autoRefresh, thermostat?.refreshInterval, register, unregister]);
 
     // Hostname validation logic before loading

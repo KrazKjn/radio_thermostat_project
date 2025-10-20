@@ -32,7 +32,7 @@ const ThermostatDisplay = ({
 }) => {
     const { tokenInfo, logout: authLogout } = useAuth();
     const { users, updateUser, disableUser } = useContext(UserContext);
-    const { register } = useContext(DataRefreshContext);
+    const { register, unregister } = useContext(DataRefreshContext);
     const showTempControlModes = new Set([1, 2]);
     const showMenu = true;
     const intervalRef = useRef();
@@ -51,17 +51,18 @@ const ThermostatDisplay = ({
 
     // Poll for temperature every 60 seconds in home mode
     useEffect(() => {
+        const listenerId = `ThermostatDisplay-${thermostatIp}`;
         if (typeof getCurrentTemperature === "function") {
             // Initial fetch
             getCurrentTemperature(thermostatIp, hostname);
             // Subscribe to refresh
-            const unsubscribe = register(() => {
+            register(listenerId, () => {
                 Logger.info("[Timer triggered, refreshing temperature", 'ThermostatDisplay', 'useEffect');
                 getCurrentTemperature(thermostatIp, hostname);
             });
-            return () => unsubscribe();
+            return () => unregister(listenerId);
         }
-    }, [activeScreen, thermostatIp, hostname, getCurrentTemperature, register]);
+    }, [activeScreen, thermostatIp, hostname, getCurrentTemperature, register, unregister]);
 
     // Handler to update a user
     const handleUserUpdate = async (userId, updates) => {

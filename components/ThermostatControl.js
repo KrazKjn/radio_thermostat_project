@@ -4,6 +4,7 @@ import ThermostatDisplay from "./ThermostatDisplay";
 import { HostnameContext } from "../context/HostnameContext";
 import { useAuth } from "../context/AuthContext";
 import { useThermostat } from "../context/ThermostatContext";
+import DataRefreshContext from "../context/DataRefreshContext";
 import commonStyles from "../styles/commonStyles";
 
 const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
@@ -17,6 +18,7 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
         updateThermostatTime,
         rebootThermostatServer,
     } = useThermostat();
+    const { register, unregister } = useContext(DataRefreshContext);
     const thermostat = thermostats[thermostatIp];
     const [menuOpen, setMenuOpen] = useState(false);
 
@@ -47,15 +49,16 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
         } else {
             getCurrentTemperature(thermostatIp, hostname);
             if (thermostat.autoRefresh) {
-                const interval = setInterval(() => {
+                const refreshFunc = () => {
                     console.log(`[ThermostatControl] ${Date().toString()}: Timer triggered, refreshing temperature`);
                     getCurrentTemperature(thermostatIp, hostname);
-                }, thermostat.refreshInterval * 60 * 1000);
+                };
+                register(thermostatIp, refreshFunc);
 
-                return () => clearInterval(interval);
+                return () => unregister(thermostatIp);
             }
         }
-    }, [thermostatIp, addThermostatInState, hostname]);
+    }, [thermostatIp, addThermostatInState, hostname, thermostat?.autoRefresh, thermostat?.refreshInterval, register, unregister]);
 
     // Hostname validation logic before loading
     if (!hostname || typeof hostname !== "string" || hostname.length < 3) {

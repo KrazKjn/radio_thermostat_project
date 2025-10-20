@@ -1,28 +1,52 @@
-import React, { createContext, useRef, useEffect, useCallback } from "react";
+import React, { createContext, useState, useRef, useEffect, useCallback } from "react";
+import { useIsFocused } from "@react-navigation/native";
 
 const DataRefreshContext = createContext();
 
 export const DataRefreshProvider = ({ children }) => {
-  const listenersRef = useRef([]);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const listenersRef = useRef(new Map());
+  const intervalRef = useRef(null);
+  const isFocused = useIsFocused();
 
-  // Register a listener
-  const register = useCallback((listener) => {
-    listenersRef.current.push(listener);
-    return () => {
-      listenersRef.current = listenersRef.current.filter(l => l !== listener);
-    };
+  const register = useCallback((id, listener) => {
+    listenersRef.current.set(id, listener);
   }, []);
 
-  // Timer to notify listeners every minute
+  const unregister = useCallback((id) => {
+    listenersRef.current.delete(id);
+  }, []);
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      listenersRef.current.forEach(listener => listener());
-    }, 60000); // 1 minute
-    return () => clearInterval(interval);
-  }, []);
+    const startTimer = () => {
+        if (!intervalRef.current) {
+            console.log("Starting timer");
+            intervalRef.current = setInterval(() => {
+                setLastUpdated(Date.now());
+                listenersRef.current.forEach(listener => listener());
+            }, 60000); // 1 minute
+        }
+    }
+
+    const stopTimer = () => {
+        if (intervalRef.current) {
+            console.log("Stopping timer");
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+    }
+
+    if (isFocused) {
+        startTimer();
+    } else {
+        stopTimer();
+    }
+
+    return () => stopTimer();
+  }, [isFocused]);
 
   return (
-    <DataRefreshContext.Provider value={{ register }}>
+    <DataRefreshContext.Provider value={{ register, unregister, lastUpdated }}>
       {children}
     </DataRefreshContext.Provider>
   );

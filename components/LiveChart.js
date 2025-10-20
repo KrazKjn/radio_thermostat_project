@@ -13,13 +13,12 @@ const Logger = require('./Logger');
 
 const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIsDarkMode, onDataChange }) => {
     const hostname = React.useContext(HostnameContext);
-    const { register } = React.useContext(DataRefreshContext);
+    const { register, unregister } = React.useContext(DataRefreshContext);
     const { fetchScannedData, getScannerStatus, startScanner, stopScanner, thermostats, updateThermostatState, formatTime, isTokenExpired } = useThermostat();
     const [dataPoints, setDataPoints] = useState([]);
     const [isScannerOn, setIsScannerOn] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(initialIsDarkMode);
     const [interval, setIntervalValue] = useState(1);
-    const refreshTimerRef = useRef(null);
     const { width: windowWidth } = useWindowDimensions();
     const chartWidth = Math.max( (parentComponent !== null ? parentComponent.innerWidth - 150 : windowWidth - 40), 320);
     const chartColors = getChartColors(isDarkMode);
@@ -45,7 +44,6 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
                 if (status) {
                     setIsScannerOn(true);
                     setIntervalValue(Math.max(1, Math.round(status.interval / 60000)));
-                    startRefreshTimer();
                 } else {
                     handleToggleChange(true);
                 }
@@ -58,23 +56,22 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
     }, [thermostatIp, getScannerStatus]);
 
     useEffect(() => {
+        const listenerId = `LiveChart-${thermostatIp}`;
         fetchData();
-        const unsubscribe = register(fetchData);
-        return () => unsubscribe();
-    }, [thermostatIp, register]);
+        register(listenerId, fetchData);
+        return () => unregister(listenerId);
+    }, [thermostatIp, register, unregister]);
 
     const handleToggleChange = async (value) => {
         setIsScannerOn(value);
         if (value) {
             try {
-                startRefreshTimer();
                 await startScanner(thermostatIp, hostname, interval * 60000);
             } catch (error) {
                 console.error("Error starting scanner:", error);
             }
         } else {
             try {
-                stopRefreshTimer();
                 await stopScanner(thermostatIp, hostname);
             } catch (error) {
                 console.error("Error stopping scanner:", error);
@@ -87,71 +84,13 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
         setIntervalValue(validatedInterval);
         if (isScannerOn) {
             try {
-                stopRefreshTimer();
                 await stopScanner(thermostatIp, hostname);
-                startRefreshTimer(validatedInterval * 60000);
                 await startScanner(thermostatIp, hostname, validatedInterval * 60000);
             } catch (error) {
                 console.error("Error updating scanner interval:", error);
             }
         }
     };
-
-    const startRefreshTimer = (customInterval) => {
-        const timerInterval = customInterval || interval * 60000;
-        stopRefreshTimer();
-        const timer = setInterval(async () => {
-            try {
-                const scannedData = await fetchScannedData(thermostatIp, hostname);
-                if (scannedData.length > 0) {
-                    const latestScan = {
-                        currentTemp: scannedData[0].temp,
-                        targetTemp: scannedData[0].tmode === HVAC_MODE_COOL ? scannedData[0].t_cool : scannedData[0].t_heat || null,
-                        currentTempMode: scannedData[0].tmode,
-                        currentFanMode: scannedData[0].fmode,
-                        currentTempState: scannedData[0].tstate,
-                        currentFanState: scannedData[0].fstate,
-                        currentTime: scannedData[0].time,
-                        formattedTime: scannedData[0].time ? formatTime(scannedData[0].time) : "Loading...",
-                        override: scannedData[0].override,
-                        hold: scannedData[0].hold,
-                        outdoor_temp: scannedData[0].outdoor_temp,
-                        cloud_cover: scannedData[0].cloud_cover,
-                        outdoor_humidity: scannedData[0].outdoor_humidity,
-                        humidity: scannedData[0].humidity,
-                        lastUpdated: Date.now(),
-                    };
-                    const contextData = thermostats[thermostatIp] || {};
-                    const fieldsToCheck = ["targetTemp", "currentTempMode", "currentFanMode", "currentTime", "formattedTime", "override", "hold", "outdoor_temp", "cloud_cover", "humidity", "ourdoor_humidity"];
-                    const hasDifference = fieldsToCheck.some(key => latestScan[key] !== contextData[key]);
-                    if (hasDifference) {
-                        updateThermostatState(thermostatIp, latestScan);
-                    }
-                    const tempData = scannedData.length > 1 && new Date(scannedData[0].lastUpdated) < new Date(scannedData[scannedData.length - 1].lastUpdated) ? scannedData : [...scannedData].reverse();
-                    setDataPoints(tempData);
-                    if (onDataChange) {
-                        onDataChange(tempData);
-                    }
-                }
-            } catch (error) {
-                console.error("Error refreshing scanned data:", error);
-            }
-        }, timerInterval);
-        refreshTimerRef.current = timer;
-    };
-
-    const stopRefreshTimer = () => {
-        if (refreshTimerRef.current) {
-            clearInterval(refreshTimerRef.current);
-            refreshTimerRef.current = null;
-        }
-    };
-
-    useEffect(() => {
-        return () => {
-            stopRefreshTimer();
-        };
-    }, []);
 
     const labels = dataPoints.map((entry) => new Date(entry.timestamp).toLocaleTimeString());
     const currentTemps = dataPoints.map((entry) => entry.temp || 0);

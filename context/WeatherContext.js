@@ -1,19 +1,20 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { HostnameContext } from './HostnameContext';
 import { useAuth } from './AuthContext';
+import DataRefreshContext from './DataRefreshContext';
 import apiFetch from '../utils/apiFetch';
 
 const Logger = require('../components/Logger');
 const WeatherContext = createContext();
 const WEATHER_LATITUDE = 29.8238;
 const WEATHER_LONGITUDE = -90.4751;
-const WEATHER_REFRESH_MINUTES = 5;
 
 export const WeatherProvider = ({ children }) => {
     const [weatherData, setWeatherData] = useState(null);
     const [lastFetch, setLastFetch] = useState(null);
     const hostname = useContext(HostnameContext);
     const { token, authenticatedApiFetch } = useAuth();
+    const { register, unregister } = useContext(DataRefreshContext);
 
     const fetchWeather = async (latitude, longitude) => {
         if (!latitude) latitude = WEATHER_LATITUDE;
@@ -45,18 +46,15 @@ export const WeatherProvider = ({ children }) => {
         return null;
     };
 
-    // Fetch weather data every 5 minutes
     useEffect(() => {
+        const listenerId = 'WeatherContext-fetchWeather';
         if (!token) return; // Wait until token is available
 
         fetchWeather(); // Initial fetch
+        register(listenerId, fetchWeather);
 
-        const interval = setInterval(() => {
-            fetchWeather();
-        }, WEATHER_REFRESH_MINUTES * 60 * 1000);
-
-        return () => clearInterval(interval);
-    }, [hostname, token]); // Re-run when token updates
+        return () => unregister(listenerId);
+    }, [hostname, token, register, unregister]); // Re-run when token updates
 
     return (
         <WeatherContext.Provider value={{ weatherData, lastFetch, fetchWeather }}>

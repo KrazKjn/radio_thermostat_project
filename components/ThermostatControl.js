@@ -8,19 +8,15 @@ import DataRefreshContext from "../context/DataRefreshContext";
 import commonStyles from "../styles/commonStyles";
 
 const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
-    const { logout } = useAuth();
     const hostname = useContext(HostnameContext);
     const {
         thermostats,
         addThermostatInState,
         getCurrentTemperature,
         updateThermostatState,
-        updateThermostatTime,
-        rebootThermostatServer,
     } = useThermostat();
     const { register, unregister } = useContext(DataRefreshContext);
     const thermostat = thermostats[thermostatIp];
-    const [menuOpen, setMenuOpen] = useState(false);
     const lastRefreshTimeRef = useRef(null);
 
     useEffect(() => {
@@ -107,15 +103,9 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
                         <ThermostatDisplay
                             thermostat={thermostat}
                             thermostatIp={thermostatIp}
-                            logout={logout}
                             hostname={hostname}
-                            getCurrentTemperature={getCurrentTemperature}
-                            updateThermostatTime={updateThermostatTime}
-                            rebootThermostatServer={rebootThermostatServer}
                             activeScreen={activeScreen}
                             setActiveScreen={setActiveScreen}
-                            menuOpen={menuOpen}
-                            setMenuOpen={setMenuOpen}
                         />
                     </>
                 )}

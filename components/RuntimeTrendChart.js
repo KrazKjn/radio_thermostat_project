@@ -72,8 +72,8 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
     const [dailyData, setDailyData] = useState([]);
     const [hourlyData, setHourlyData] = useState([]);
     const [viewMode, setViewMode] = useState('daily');
-    const [dayLimit, setDayLimit] = useState(14);
-    const [hourLimit, setHourLimit] = useState(48);
+    const [dayLimit, setDayLimit] = useState(7);
+    const [hourLimit, setHourLimit] = useState(24);
     const [thermostats, setThermostats] = useState([]);
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
     const chartColors = getChartColors(isDarkMode);

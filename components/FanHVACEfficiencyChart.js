@@ -14,7 +14,7 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
     const hostname = React.useContext(HostnameContext);
     const { getFanVsHvacDaily } = useThermostat();
     const [chartData, setChartData] = useState([]);
-    const [dayLimit, setDayLimit] = useState(14);
+    const [dayLimit, setDayLimit] = useState(7);
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
     const chartColors = getChartColors(isDarkMode);
     const chartWidth = windowWidth - 40;

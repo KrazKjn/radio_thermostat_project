@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useContext } from "react";
 import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import { useAuth } from "../context/AuthContext";
+import { useThermostat } from "../context/ThermostatContext";
+import { UserContext } from '../context/UserContext';
+import DataRefreshContext from "../context/DataRefreshContext";
 import ThermostatToggle from "./ThermostatToggle";
 import FanToggle from "./FanToggle";
 import HoldToggle from "./HoldToggle";
@@ -14,8 +17,6 @@ import DataChart from "./DataChart";
 import commonStyles from "../styles/commonStyles";
 import OptionsInfo from "./OptionsInfo";
 import UserManagement from "./UserManagement";
-import { UserContext } from '../context/UserContext';
-import DataRefreshContext from "../context/DataRefreshContext";
 
 const Logger = require('./Logger');
 
@@ -23,13 +24,14 @@ const ThermostatDisplay = ({
     thermostat,
     thermostatIp,
     hostname,
-    getCurrentTemperature,
-    updateThermostatName,
-    rebootThermostatServer,
     activeScreen,
-    setActiveScreen,
-    updateThermostatTime
+    setActiveScreen
 }) => {
+    const {
+        getCurrentTemperature,
+        updateThermostatTime,
+        rebootThermostatServer,
+    } = useThermostat();
     const { tokenInfo, logout: authLogout } = useAuth();
     const { users, updateUser, disableUser } = useContext(UserContext);
     const { register, unregister } = useContext(DataRefreshContext);
@@ -182,7 +184,7 @@ const ThermostatDisplay = ({
                     )}
 
                     {/* Swing Slider */}
-                    {showTempControlModes.has(thermostat.currentTempMode) && (
+                    {process.env.ENABLE_SWING && showTempControlModes.has(thermostat.currentTempMode) && (
                         <View style={commonStyles.swingRow}>
                             <SwingSlider thermostatIp={thermostatIp} />
                         </View>

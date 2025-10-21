@@ -2,6 +2,7 @@ import React, { createContext, useState, useRef, useEffect, useCallback } from "
 import { useIsFocused } from "@react-navigation/native";
 
 const DataRefreshContext = createContext();
+const Logger = require('../components/Logger');
 
 export const DataRefreshProvider = ({ children }) => {
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -11,10 +12,12 @@ export const DataRefreshProvider = ({ children }) => {
 
   // Register a listener
   const register = useCallback((id, listener) => {
+    Logger.info(`Registering data refresh listener: ${id}`, 'DataRefreshContext', 'register');
     listenersRef.current.set(id, listener);
   }, []);
 
   const unregister = useCallback((id) => {
+    Logger.info(`Unregistering data refresh listener: ${id}`, 'DataRefreshContext', 'unregister');
     listenersRef.current.delete(id);
   }, []);
 
@@ -22,7 +25,7 @@ export const DataRefreshProvider = ({ children }) => {
   useEffect(() => {
     const startTimer = () => {
         if (!intervalRef.current) {
-            console.log("Starting timer");
+            Logger.info("Starting timer", 'DataRefreshContext', 'startTimer');
             intervalRef.current = setInterval(() => {
                 setLastUpdated(Date.now());
                 listenersRef.current.forEach(listener => listener());
@@ -32,7 +35,7 @@ export const DataRefreshProvider = ({ children }) => {
 
     const stopTimer = () => {
         if (intervalRef.current) {
-            console.log("Stopping timer");
+            Logger.info("Stopping timer", 'DataRefreshContext', 'stopTimer');
             clearInterval(intervalRef.current);
             intervalRef.current = null;
         }

@@ -10,6 +10,9 @@ import withExport from './withExport';
 
 const Logger = require('./Logger');
 
+const formatMetric = (value, unit) =>
+  value != null ? `${value.toFixed(1)}${unit}` : '--';
+
 const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange, viewMode }) => {
   const hostname = React.useContext(HostnameContext);
   const { getThermostats, getDailyCycles, getHourlyCycles } = useThermostat();
@@ -63,7 +66,11 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
     return {
         x: new Date(`${d.run_date} 12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: '2-digit', day: '2-digit' }),
         y: d.cycle_count,
-        label: `${d.cycle_count} cycles\n${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes\n$${costPerDay.toFixed(2)} / day\nAvg Indoor Temp: ${d.avg_indoor_temp.toFixed(1)}°F\nAvg Outdoor Temp: ${d.avg_outdoor_temp.toFixed(1)}°F\nAvg Indoor Humidity: ${d.avg_indoor_humidity.toFixed(1)}%\nAvg Outdoor Humidity: ${d.avg_outdoor_humidity.toFixed(1)}%`
+        label: `${d.cycle_count} cycles
+            ${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes
+            $${costPerDay.toFixed(2)} / day
+            Temps: Indoor ${formatMetric(d.avg_indoor_temp, ' F')}, Outdoor ${formatMetric(d.avg_outdoor_temp, ' F')}
+            Humidity: Indoor ${formatMetric(d.avg_indoor_humidity, '%')}, Outdoor ${formatMetric(d.avg_outdoor_humidity, '%')}`
     };
   });
 
@@ -88,7 +95,11 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
     return {
         x: label,
         y: d.cycle_count,
-        label: `${d.cycle_count} cycles\n${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes\n$${costPerCycle.toFixed(2)} / cycle ${wearIndex}\nAvg Indoor Temp: ${d.avg_indoor_temp.toFixed(1)}°F\nAvg Outdoor Temp: ${d.avg_outdoor_temp.toFixed(1)}°F\nAvg Indoor Humidity: ${d.avg_indoor_humidity.toFixed(1)}%\nAvg Outdoor Humidity: ${d.avg_outdoor_humidity.toFixed(1)}%`
+        label: `${d.cycle_count} cycles
+            ${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes
+            $${costPerCycle.toFixed(2)} / cycle ${wearIndex}
+            Temps: Indoor ${formatMetric(d.avg_indoor_temp, ' F')}, Outdoor ${formatMetric(d.avg_outdoor_temp, ' F')}
+            Humidity: Indoor ${formatMetric(d.avg_indoor_humidity, '%')}, Outdoor ${formatMetric(d.avg_outdoor_humidity, '%')}`
     };
   });
 

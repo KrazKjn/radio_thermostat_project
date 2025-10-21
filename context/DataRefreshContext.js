@@ -9,6 +9,7 @@ export const DataRefreshProvider = ({ children }) => {
   const intervalRef = useRef(null);
   const isFocused = useIsFocused();
 
+  // Register a listener
   const register = useCallback((id, listener) => {
     listenersRef.current.set(id, listener);
   }, []);
@@ -17,6 +18,7 @@ export const DataRefreshProvider = ({ children }) => {
     listenersRef.current.delete(id);
   }, []);
 
+  // Timer to notify listeners every minute
   useEffect(() => {
     const startTimer = () => {
         if (!intervalRef.current) {

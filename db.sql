@@ -381,17 +381,18 @@ CREATE TABLE IF NOT EXISTS cycle_segments (
     segment_start INTEGER NOT NULL,       -- Unix timestamp (ms)
     segment_end INTEGER NOT NULL,         -- Unix timestamp (ms)
     segment_runtime INTEGER NOT NULL,     -- Duration in ms
-    run_hour TEXT NOT NULL,               -- 'YYYY-MM-DD HH:00:00'
+    segment_hour TEXT NOT NULL,           -- 'YYYY-MM-DD HH:00:00'
     FOREIGN KEY (thermostat_id) REFERENCES thermostats(id),
     FOREIGN KEY (cycle_id) REFERENCES tstate_cycles(id)
 );
 
 -- View for hourly runtime aggregation
-CREATE VIEW IF NOT EXISTS view_cycle_hourly_runtime AS
+DROP VIEW IF EXISTS view_cycle_hourly_runtime;
+CREATE VIEW view_cycle_hourly_runtime AS
 SELECT
     cs.thermostat_id,
-    cs.run_hour,
-    SUM(cs.segment_runtime) / 60000.0 AS total_runtime_minutes,
+    cs.segment_hour,
+    cs.segment_runtime / 60000.0 AS total_runtime_minutes,
     AVG(sd.temp) AS avg_indoor_temp,
     AVG(sd.outdoor_temp) AS avg_outdoor_temp,
     AVG(sd.humidity) AS avg_indoor_humidity,
@@ -399,8 +400,8 @@ SELECT
 FROM cycle_segments cs
 JOIN scan_data sd ON cs.thermostat_id = sd.thermostat_id
     AND sd.timestamp >= cs.segment_start AND sd.timestamp <= cs.segment_end
-GROUP BY cs.thermostat_id, cs.run_hour
-ORDER BY cs.run_hour;
+GROUP BY cs.thermostat_id, cs.segment_hour
+ORDER BY cs.segment_hour;
 
 CREATE TABLE IF NOT EXISTS compressors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

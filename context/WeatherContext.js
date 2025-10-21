@@ -47,6 +47,7 @@ export const WeatherProvider = ({ children }) => {
         return null;
     };
 
+    // Fetch weather data every 5 minutes
     useEffect(() => {
         const listenerId = 'WeatherContext-fetchWeather';
         if (!token) return; // Wait until token is available

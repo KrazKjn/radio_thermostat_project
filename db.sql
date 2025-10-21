@@ -388,13 +388,19 @@ CREATE TABLE IF NOT EXISTS cycle_segments (
 
 -- View for hourly runtime aggregation
 CREATE VIEW IF NOT EXISTS view_cycle_hourly_runtime AS
-SELECT 
-    thermostat_id,
-    run_hour,
-    SUM(segment_runtime) / 60000.0 AS total_runtime_minutes
-FROM cycle_segments
-GROUP BY thermostat_id, run_hour
-ORDER BY run_hour;
+SELECT
+    cs.thermostat_id,
+    cs.run_hour,
+    SUM(cs.segment_runtime) / 60000.0 AS total_runtime_minutes,
+    AVG(sd.temp) AS avg_indoor_temp,
+    AVG(sd.outdoor_temp) AS avg_outdoor_temp,
+    AVG(sd.humidity) AS avg_indoor_humidity,
+    AVG(sd.outdoor_humidity) AS avg_outdoor_humidity
+FROM cycle_segments cs
+JOIN scan_data sd ON cs.thermostat_id = sd.thermostat_id
+    AND sd.timestamp >= cs.segment_start AND sd.timestamp <= cs.segment_end
+GROUP BY cs.thermostat_id, cs.run_hour
+ORDER BY cs.run_hour;
 
 CREATE TABLE IF NOT EXISTS compressors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

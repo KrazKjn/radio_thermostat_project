@@ -271,10 +271,31 @@ FROM fstate_cycles
 
 DROP VIEW IF EXISTS view_tstate_cycles;
 CREATE VIEW view_tstate_cycles AS
-SELECT *,
-	strftime('%Y-%m-%d %I:%M %p', start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
-	strftime('%Y-%m-%d %I:%M %p', stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local
-FROM tstate_cycles
+SELECT
+    tc.*,
+    strftime('%Y-%m-%d %I:%M %p', tc.start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
+    strftime('%Y-%m-%d %I:%M %p', tc.stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local,
+    agg.avg_indoor_temp,
+    agg.avg_outdoor_temp,
+    agg.avg_indoor_humidity,
+    agg.avg_outdoor_humidity
+FROM
+    tstate_cycles tc
+LEFT JOIN (
+    SELECT
+        tc.id AS cycle_id,
+        AVG(sd.temp) AS avg_indoor_temp,
+        AVG(sd.outdoor_temp) AS avg_outdoor_temp,
+        AVG(sd.humidity) AS avg_indoor_humidity,
+        AVG(sd.outdoor_humidity) AS avg_outdoor_humidity
+    FROM
+        tstate_cycles tc
+    JOIN
+        scan_data sd ON sd.thermostat_id = tc.thermostat_id
+                     AND sd.timestamp BETWEEN tc.start_timestamp AND tc.stop_timestamp
+    GROUP BY
+        tc.id
+) agg ON tc.id = agg.cycle_id;
 
 DROP VIEW IF EXISTS view_tstate_daily_runtime;
 CREATE VIEW view_tstate_daily_runtime AS

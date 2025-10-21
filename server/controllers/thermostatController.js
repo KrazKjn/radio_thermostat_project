@@ -1168,7 +1168,7 @@ const getDailyRuntime = (req, res) => {
             SELECT 
               date(start_timestamp / 1000, 'unixepoch', 'localtime') as run_date,
               SUM(run_time) AS total_runtime_hr
-            FROM tstate_cycles
+            FROM view_tstate_cycles
             WHERE thermostat_id = ?
             GROUP BY run_date
             ORDER BY run_date DESC
@@ -1383,10 +1383,14 @@ const getDailyCycles = (req, res) => {
         const limitClause = (days && Number(days) > 0) ? `LIMIT ?` : ``;
         const query = `
             SELECT
-              date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
-              COUNT(*) AS cycle_count,
-              SUM(run_time) AS total_runtime_minutes
-            FROM tstate_cycles
+                date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+                COUNT(*) AS cycle_count,
+                SUM(run_time) AS total_runtime_minutes,
+                AVG(avg_indoor_temp) AS avg_indoor_temp,
+                AVG(avg_outdoor_temp) AS avg_outdoor_temp,
+                AVG(avg_indoor_humidity) AS avg_indoor_humidity,
+                AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
+            FROM view_tstate_cycles
             WHERE thermostat_id = ?
             GROUP BY run_date
             ORDER BY run_date DESC
@@ -1418,8 +1422,12 @@ const getHourlyCycles = (req, res) => {
                 date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
                 strftime('%H', start_timestamp / 1000, 'unixepoch', 'localtime') AS hour,
                 COUNT(*) AS cycle_count,
-                SUM((stop_timestamp - start_timestamp) / 60000.0) AS total_runtime_minutes
-            FROM tstate_cycles
+                SUM(run_time) AS total_runtime_minutes,
+                AVG(avg_indoor_temp) AS avg_indoor_temp,
+                AVG(avg_outdoor_temp) AS avg_outdoor_temp,
+                AVG(avg_indoor_humidity) AS avg_indoor_humidity,
+                AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
+            FROM view_tstate_cycles
             WHERE thermostat_id = ? AND stop_timestamp IS NOT NULL
             GROUP BY run_date, hour
             ORDER BY run_date DESC, hour DESC

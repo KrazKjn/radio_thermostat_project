@@ -22,7 +22,6 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
     useEffect(() => {
         if (!hostname) return;
 
-        const thermostat = thermostats[thermostatIp];
         const listenerId = `ThermostatControl-${thermostatIp}`;
 
         if (!thermostat) {

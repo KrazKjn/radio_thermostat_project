@@ -69,8 +69,8 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
         label: `${d.cycle_count} cycles
             ${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes
             $${costPerDay.toFixed(2)} / day
-            Temps: Indoor ${formatMetric(d.avg_indoor_temp, ' F')}, Outdoor ${formatMetric(d.avg_outdoor_temp, ' F')}
-            Humidity: Indoor ${formatMetric(d.avg_indoor_humidity, '%')}, Outdoor ${formatMetric(d.avg_outdoor_humidity, '%')}`
+            Temps: In ${formatMetric(d.avg_indoor_temp, ' F')}, Out ${formatMetric(d.avg_outdoor_temp, ' F')}
+            Humidity: In ${formatMetric(d.avg_indoor_humidity, '%')}, Out ${formatMetric(d.avg_outdoor_humidity, '%')}`
     };
   });
 
@@ -98,8 +98,8 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
         label: `${d.cycle_count} cycles
             ${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes
             $${costPerCycle.toFixed(2)} / cycle ${wearIndex}
-            Temps: Indoor ${formatMetric(d.avg_indoor_temp, ' F')}, Outdoor ${formatMetric(d.avg_outdoor_temp, ' F')}
-            Humidity: Indoor ${formatMetric(d.avg_indoor_humidity, '%')}, Outdoor ${formatMetric(d.avg_outdoor_humidity, '%')}`
+            Temps: In ${formatMetric(d.avg_indoor_temp, ' F')}, Out ${formatMetric(d.avg_outdoor_temp, ' F')}
+            Humidity: In ${formatMetric(d.avg_indoor_humidity, '%')}, Out ${formatMetric(d.avg_outdoor_humidity, '%')}`
     };
   });
 

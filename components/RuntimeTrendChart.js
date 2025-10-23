@@ -38,8 +38,8 @@ const mapDailyData = (dailyJson, costPerKwH, KwHDraw) =>
         label: `${d.total_runtime_hr.toFixed(1)} minutes
             ${(d.total_runtime_hr / 60).toFixed(1)} hours
             $${cost.toFixed(2)}
-            Temps: Indoor ${formatMetric(d.avg_indoor_temp, ' F')}, Outdoor ${formatMetric(d.avg_outdoor_temp, ' F')}
-            Humidity: Indoor ${formatMetric(d.avg_indoor_humidity, '%')}, Outdoor ${formatMetric(d.avg_outdoor_humidity, '%')}`
+            Temps: In ${formatMetric(d.avg_indoor_temp, ' F')}, Out ${formatMetric(d.avg_outdoor_temp, ' F')}
+            Humidity: In ${formatMetric(d.avg_indoor_humidity, '%')}, Out ${formatMetric(d.avg_outdoor_humidity, '%')}`
     };
   });
 

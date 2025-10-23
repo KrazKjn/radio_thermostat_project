@@ -51,6 +51,38 @@ export const ThermostatProvider = ({ children }) => {
     return now >= payload.exp;
   }
 
+  function isNewerWeekdayTime(current, updated) {
+    const weekdays = [
+        'Sunday', 'Monday', 'Tuesday', 'Wednesday',
+        'Thursday', 'Friday', 'Saturday'
+    ];
+
+    const parseWeekdayTime = (str) => {
+        const [weekday, timePart] = str.split(',').map(s => s.trim());
+        if (!weekday || !timePart || !weekdays.includes(weekday)) return NaN;
+
+        const today = new Date();
+        const todayIndex = today.getDay();
+        const targetIndex = weekdays.indexOf(weekday);
+        const offsetDays = (targetIndex - todayIndex + 7) % 7;
+
+        const targetDate = new Date(today);
+        targetDate.setDate(today.getDate() + offsetDays);
+
+        const fullDateStr = `${targetDate.toDateString()} ${timePart}`;
+        const parsed = new Date(fullDateStr);
+        return parsed.getTime();
+    };
+
+    const updatedTime = parseWeekdayTime(updated);
+    const currentTime = parseWeekdayTime(current);
+
+    if (isNaN(updatedTime)) return false;
+    if (isNaN(currentTime)) return true;
+
+    return updatedTime > currentTime;
+  }
+
   // Update thermostat state
   const updateThermostatState = (thermostatIp, updates) => {
     setThermostats((prevState) => {
@@ -64,9 +96,18 @@ export const ThermostatProvider = ({ children }) => {
         }
 
         const differences = Object.keys(updates).reduce((diff, key) => {
-            if (currentState[key] !== updates[key]) {
-                diff[key] = { current: currentState[key], updated: updates[key] };
+            const current = currentState[key];
+            const updated = updates[key];
+            const isFormattedTime = key === 'formattedTime';
+            const isDifferent = current !== updated;
+            const isGreater = isFormattedTime
+                ? isNewerWeekdayTime(current, updated)
+                : true;
+
+            if (isDifferent && isGreater) {
+                diff[key] = { current, updated };
             }
+
             return diff;
         }, {});
         Logger.debug(`Differences: ${JSON.stringify(differences, null, 2)}`, 'ThermostatContext', 'updateThermostatState');

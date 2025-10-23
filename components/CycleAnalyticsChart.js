@@ -10,6 +10,9 @@ import withExport from './withExport';
 
 const Logger = require('./Logger');
 
+const formatMetric = (value, unit) =>
+  value != null ? `${value.toFixed(1)}${unit}` : '--';
+
 const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange, viewMode }) => {
   const hostname = React.useContext(HostnameContext);
   const { getThermostats, getDailyCycles, getHourlyCycles } = useThermostat();
@@ -63,7 +66,11 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
     return {
         x: new Date(`${d.run_date} 12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: '2-digit', day: '2-digit' }),
         y: d.cycle_count,
-        label: `${d.cycle_count} cycles\n${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes\n$${costPerDay.toFixed(2)} / day`
+        label: `${d.cycle_count} cycles
+            ${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes
+            $${costPerDay.toFixed(2)} / day
+            Temps: In ${formatMetric(d.avg_indoor_temp, ' F')}, Out ${formatMetric(d.avg_outdoor_temp, ' F')}
+            Humidity: In ${formatMetric(d.avg_indoor_humidity, '%')}, Out ${formatMetric(d.avg_outdoor_humidity, '%')}`
     };
   });
 
@@ -88,7 +95,11 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
     return {
         x: label,
         y: d.cycle_count,
-        label: `${d.cycle_count} cycles\n${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes\n$${costPerCycle.toFixed(2)} / cycle ${wearIndex}`
+        label: `${d.cycle_count} cycles
+            ${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes
+            $${costPerCycle.toFixed(2)} / cycle ${wearIndex}
+            Temps: In ${formatMetric(d.avg_indoor_temp, ' F')}, Out ${formatMetric(d.avg_outdoor_temp, ' F')}
+            Humidity: In ${formatMetric(d.avg_indoor_humidity, '%')}, Out ${formatMetric(d.avg_outdoor_humidity, '%')}`
     };
   });
 

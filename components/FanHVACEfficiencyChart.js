@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { VictoryChart, VictoryBar, VictoryAxis, VictoryTheme } from 'victory';
+import { VictoryChart, VictoryBar, VictoryAxis, VictoryTheme, VictoryLabel, VictoryTooltip } from 'victory';
 import { useThermostat } from "../context/ThermostatContext";
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
@@ -14,7 +14,7 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
     const hostname = React.useContext(HostnameContext);
     const { getFanVsHvacDaily } = useThermostat();
     const [chartData, setChartData] = useState([]);
-    const [dayLimit, setDayLimit] = useState(14);
+    const [dayLimit, setDayLimit] = useState(7);
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
     const chartColors = getChartColors(isDarkMode);
     const chartWidth = windowWidth - 40;
@@ -103,6 +103,16 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
                         barRatio={0.8}
                         cornerRadius={2}
                         labels={({ datum }) => `${datum.category}: ${datum.y.toFixed(1)}h`}
+                        labelComponent={
+                            <VictoryLabel
+                                style={{
+                                    fill: '#FFFF00',
+                                    fontSize: 12,
+                                    fontWeight: 'normal',
+                                    fontFamily: 'Roboto'
+                                }}
+                            />
+                        }
                     />
                 </VictoryChart>
             ) : (

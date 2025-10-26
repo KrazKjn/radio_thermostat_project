@@ -29,7 +29,7 @@ const mapDailyData = (dailyJson, costPerKwH, KwHDraw) =>
     dailyJson.map(d => {
     const cost = ((d.total_runtime_hr / 60) * costPerKwH * KwHDraw) || 0;
     return {
-        x: new Date(d.run_date).toLocaleDateString('en-US', {
+        x: new Date(`${d.run_date} 12:00:00`).toLocaleDateString('en-US', {
             weekday: 'short',
             month: '2-digit',
             day: '2-digit'

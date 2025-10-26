@@ -1237,7 +1237,7 @@ const getHourlyRuntime = (req, res) => {
         const limitClause = (hours && Number(hours) > 0) ? `LIMIT ?` : ``;
         const query = `
             SELECT segment_hour,
-                total_runtime_minutes,            
+                total_runtime_minutes,
                 avg_indoor_temp,
                 avg_outdoor_temp,
                 avg_indoor_humidity,

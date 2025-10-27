@@ -80,7 +80,7 @@ const CloudSettings = ({ settings, onSave, onRemove, onSettingsChange }) => {
                 <TextInput
                     style={commonStyles.digitalInput}
                     keyboardType="numeric"
-                    value={String(settings.interval)}
+                    value={String(settings.interval || '')}
                     onChangeText={v => onSettingsChange({ ...settings, interval: parseInt(v) || 0 })}
                 />
             </View>
@@ -88,7 +88,7 @@ const CloudSettings = ({ settings, onSave, onRemove, onSettingsChange }) => {
                 <Text style={commonStyles.digitalButtonText}>URL</Text>
                 <TextInput
                     style={[commonStyles.digitalInput, { flex: 1 }]}
-                    value={settings.url}
+                    value={settings.url || ''}
                     onChangeText={v => onSettingsChange({ ...settings, url: v })}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -98,7 +98,7 @@ const CloudSettings = ({ settings, onSave, onRemove, onSettingsChange }) => {
                 <Text style={commonStyles.digitalButtonText}>Auth Key</Text>
                 <TextInput
                     style={commonStyles.digitalInput}
-                    value={settings.authkey}
+                    value={settings.authkey || ''}
                     onChangeText={v => onSettingsChange({ ...settings, authkey: v })}
                     autoCapitalize="none"
                     autoCorrect={false}

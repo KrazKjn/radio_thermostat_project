@@ -32,8 +32,8 @@ const SensorSettings = ({ settings, onSave, onSettingsChange }) => {
                 <Text style={commonStyles.digitalButtonText}>MQTT Topic</Text>
                 <TextInput
                     style={[commonStyles.digitalInput, { flex: 1 }]}
-                    value={settings.mqttTopic}
-                    onChangeText={(v) => onSettingsChange({ ...settings, mqttTopic: v })}
+                    value={settings.mqtt_topic || ''}
+                    onChangeText={(v) => onSettingsChange({ ...settings, mqtt_topic: v })}
                     autoCapitalize="none"
                     autoCorrect={false}
                     placeholder="e.g., shellies/shellyht-123456/status"

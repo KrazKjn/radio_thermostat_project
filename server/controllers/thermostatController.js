@@ -1476,42 +1476,6 @@ const getHourlyCycles = (req, res) => {
     }
 };
 
-const getSensorSettings = (req, res) => {
-    try {
-        const { ip } = req.params;
-        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
-        if (!thermostat) {
-            return res.status(404).json({ error: "Thermostat not found" });
-        }
-        const row = db.prepare(`SELECT mqtt_topic FROM shelly_sensors WHERE thermostat_id = ?`).get(thermostat.id);
-        res.json(row || { mqtt_topic: '' });
-    } catch (error) {
-        Logger.error(`Error in getSensorSettings: ${error.message}`, 'ThermostatController', 'getSensorSettings');
-        res.status(500).json({ error: 'Failed to retrieve sensor settings' });
-    }
-};
-
-const updateSensorSettings = (req, res) => {
-    try {
-        const { ip } = req.params;
-        const { mqtt_topic } = req.body;
-        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
-        if (!thermostat) {
-            return res.status(404).json({ error: "Thermostat not found" });
-        }
-        db.prepare(`
-            INSERT INTO shelly_sensors (thermostat_id, mqtt_topic)
-            VALUES (?, ?)
-            ON CONFLICT(thermostat_id)
-            DO UPDATE SET mqtt_topic = excluded.mqtt_topic
-        `).run(thermostat.id, mqtt_topic);
-        res.json({ success: true });
-    } catch (error) {
-        Logger.error(`Error in updateSensorSettings: ${error.message}`, 'ThermostatController', 'updateSensorSettings');
-        res.status(500).json({ error: 'Failed to update sensor settings' });
-    }
-};
-
 module.exports = {
     getThermostatData,
     updateThermostat,

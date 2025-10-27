@@ -1130,38 +1130,6 @@ export const ThermostatProvider = ({ children }) => {
       }
   };
 
-  const getSensorSettings = async (thermostatIp, hostname) => {
-    try {
-        const response = await authenticatedApiFetch(
-            `${hostname}/sensor/${thermostatIp}`,
-            "GET",
-            null,
-            "Error fetching sensor settings",
-            "Fetching sensor settings..."
-        );
-        return response;
-    } catch (error) {
-        console.error("Error fetching sensor settings:", error);
-        throw error;
-    }
-  };
-
-  const updateSensorSettings = async (thermostatIp, hostname, settings) => {
-    try {
-        const response = await authenticatedApiFetch(
-            `${hostname}/sensor/${thermostatIp}`,
-            "POST",
-            settings,
-            "Error updating sensor settings",
-            "Updating sensor settings..."
-        );
-        return response;
-    } catch (error) {
-        console.error("Error updating sensor settings:", error);
-        throw error;
-    }
-  };
-
   return (
     <ThermostatContext.Provider
         value={{
@@ -1212,8 +1180,6 @@ export const ThermostatProvider = ({ children }) => {
             getFanVsHvacDaily,
             getDailyCycles,
             getHourlyCycles,
-            getSensorSettings,
-            updateSensorSettings,
         }}
     >
         {children}

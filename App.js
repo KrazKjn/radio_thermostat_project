@@ -1,5 +1,5 @@
 import React, { useContext } from "react";
-import { Alert, Text, View, SafeAreaView, Platform, Button } from "react-native";
+import { Button } from "react-native";
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ThermostatSelector from "./components/ThermostatSelector";
@@ -36,7 +36,7 @@ const AppContent = () => {
             <Stack.Screen name="Settings" component={SettingsScreen} />
         </Stack.Navigator>
     ) : (
-        hostname === "Loading..." ? <Text>Loading ...</Text> : <LoginScreen />
+        hostname === "Loading..." ? <Text>Loading...</Text> : <LoginScreen />
     );
 };
 

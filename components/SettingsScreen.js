@@ -22,6 +22,7 @@ const SettingsScreen = () => {
     const [cloudSettings, setCloudSettings] = useState(null);
     const [sensorSettings, setSensorSettings] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [initialLoad, setInitialLoad] = useState(true);
 
     useEffect(() => {
         const fetchThermostats = async () => {
@@ -30,9 +31,14 @@ const SettingsScreen = () => {
                 setThermostats(data);
                 if (data.length > 0) {
                     setSelectedThermostat(data[0]);
+                } else {
+                    setLoading(false); // No thermostats, stop loading
                 }
             } catch (error) {
                 Alert.alert("Error", "Failed to fetch thermostats.");
+                setLoading(false);
+            } finally {
+                setInitialLoad(false);
             }
         };
         fetchThermostats();
@@ -100,42 +106,47 @@ const SettingsScreen = () => {
         }
     };
 
+    if (initialLoad) {
+        return <ActivityIndicator size="large" color="#0ff" />;
+    }
+
     return (
         <ScrollView style={commonStyles.container}>
             <Text style={commonStyles.header}>Settings</Text>
             {thermostats.length > 0 ? (
-                <Picker
-                    selectedValue={selectedThermostat?.ip}
-                    onValueChange={(itemValue) => {
-                        const thermostat = thermostats.find(t => t.ip === itemValue);
-                        setSelectedThermostat(thermostat);
-                    }}
-                    style={commonStyles.picker}
-                >
-                    {thermostats.map((thermostat) => (
-                        <Picker.Item key={thermostat.ip} label={thermostat.name} value={thermostat.ip} />
-                    ))}
-                </Picker>
-            ) : (
-                <ActivityIndicator size="large" color="#0ff" />
-            )}
-
-            {loading ? (
-                <ActivityIndicator size="large" color="#0ff" />
-            ) : (
                 <>
-                    <CloudSettings
-                        settings={cloudSettings}
-                        onSave={handleSaveCloud}
-                        onRemove={handleRemove}
-                        onSettingsChange={setCloudSettings}
-                    />
-                    <SensorSettings
-                        settings={sensorSettings}
-                        onSave={handleSaveSensor}
-                        onSettingsChange={setSensorSettings}
-                    />
+                    <Picker
+                        selectedValue={selectedThermostat?.ip}
+                        onValueChange={(itemValue) => {
+                            const thermostat = thermostats.find(t => t.ip === itemValue);
+                            setSelectedThermostat(thermostat);
+                        }}
+                        style={commonStyles.picker}
+                    >
+                        {thermostats.map((thermostat) => (
+                            <Picker.Item key={thermostat.ip} label={thermostat.name} value={thermostat.ip} />
+                        ))}
+                    </Picker>
+                    {loading ? (
+                        <ActivityIndicator size="large" color="#0ff" />
+                    ) : (
+                        <>
+                            <CloudSettings
+                                settings={cloudSettings}
+                                onSave={handleSaveCloud}
+                                onRemove={handleRemove}
+                                onSettingsChange={setCloudSettings}
+                            />
+                            <SensorSettings
+                                settings={sensorSettings}
+                                onSave={handleSaveSensor}
+                                onSettingsChange={setSensorSettings}
+                            />
+                        </>
+                    )}
                 </>
+            ) : (
+                <Text style={commonStyles.digitalLabel}>No thermostats found.</Text>
             )}
         </ScrollView>
     );

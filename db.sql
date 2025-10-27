@@ -450,11 +450,3 @@ SELECT
 FROM thermostats t
 JOIN compressors c
   ON c.thermostat_id = t.id
-
--- Shelly H/T Sensor Configuration
-CREATE TABLE IF NOT EXISTS shelly_sensors (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    thermostat_id INTEGER NOT NULL REFERENCES thermostats(id),
-    mqtt_topic TEXT NOT NULL,
-    UNIQUE(thermostat_id)
-);

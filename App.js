@@ -1,6 +1,9 @@
 import React, { useContext } from "react";
-import { Alert, Text, View, SafeAreaView, Platform } from "react-native";
+import { Alert, Text, View, SafeAreaView, Platform, Button } from "react-native";
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ThermostatSelector from "./components/ThermostatSelector";
+import SettingsScreen from "./components/SettingsScreen"; // Import the new screen
 import { HostnameContext, HostnameProvider } from "./context/HostnameContext";
 import { useAuth, AuthProvider } from "./context/AuthContext";
 import { ThermostatProvider } from "./context/ThermostatContext";
@@ -9,53 +12,51 @@ import { UserProvider } from './context/UserContext';
 import { DataRefreshProvider } from "./context/DataRefreshContext";
 import { WeatherProvider } from "./context/WeatherContext";
 
-const showAlert = () => {
-  if (Platform.OS === "web") {
-    alert("Notice: This is a simple alert!"); // Standard browser alert
-  } else {
-    Alert.alert("Notice", "This is a simple alert!"); // Native alert
-  }
-};
+const Stack = createNativeStackNavigator();
 
 const AppContent = () => {
     const { token } = useAuth();
     const hostname = useContext(HostnameContext);
 
-    // Render login if not authenticated, otherwise render your app
     return token ? (
-        <SafeAreaView style={{ flex: 1 }}>
-              {Platform.OS === "web" ? (
-                  <>
-                      <ThermostatSelector />
-                  </>
-              ) : (
-                  <View>
-                      <ThermostatSelector />
-                  </View>
-              )}
-        </SafeAreaView>
+        <Stack.Navigator>
+            <Stack.Screen
+                name="Thermostats"
+                component={ThermostatSelector}
+                options={({ navigation }) => ({
+                    headerRight: () => (
+                        <Button
+                            onPress={() => navigation.navigate('Settings')}
+                            title="Settings"
+                            color="#0ff"
+                        />
+                    ),
+                })}
+            />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+        </Stack.Navigator>
     ) : (
         hostname === "Loading..." ? <Text>Loading ...</Text> : <LoginScreen />
     );
 };
 
 const App = () => {
-  const hostname = useContext(HostnameContext);
-
   return (
-    <HostnameProvider>
-      <AuthProvider>
-        <UserProvider>
-          <WeatherProvider>
-            <ThermostatProvider>
-              <DataRefreshProvider>
-                <AppContent />
-              </DataRefreshProvider>
-            </ThermostatProvider>
-            </WeatherProvider>
-        </UserProvider>
-      </AuthProvider>
-    </HostnameProvider>
+    <NavigationContainer>
+      <HostnameProvider>
+        <AuthProvider>
+          <UserProvider>
+            <DataRefreshProvider>
+              <WeatherProvider>
+                <ThermostatProvider>
+                  <AppContent />
+                </ThermostatProvider>
+              </WeatherProvider>
+            </DataRefreshProvider>
+          </UserProvider>
+        </AuthProvider>
+      </HostnameProvider>
+    </NavigationContainer>
   );
 };
 

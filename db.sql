@@ -271,10 +271,31 @@ FROM fstate_cycles
 
 DROP VIEW IF EXISTS view_tstate_cycles;
 CREATE VIEW view_tstate_cycles AS
-SELECT *,
-	strftime('%Y-%m-%d %I:%M %p', start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
-	strftime('%Y-%m-%d %I:%M %p', stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local
-FROM tstate_cycles
+SELECT
+    tc.*,
+    strftime('%Y-%m-%d %I:%M %p', tc.start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
+    strftime('%Y-%m-%d %I:%M %p', tc.stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local,
+    agg.avg_indoor_temp,
+    agg.avg_outdoor_temp,
+    agg.avg_indoor_humidity,
+    agg.avg_outdoor_humidity
+FROM
+    tstate_cycles tc
+LEFT JOIN (
+    SELECT
+        tc.id AS cycle_id,
+        AVG(sd.temp) AS avg_indoor_temp,
+        AVG(sd.outdoor_temp) AS avg_outdoor_temp,
+        AVG(sd.humidity) AS avg_indoor_humidity,
+        AVG(sd.outdoor_humidity) AS avg_outdoor_humidity
+    FROM
+        tstate_cycles tc
+    JOIN
+        scan_data sd ON sd.thermostat_id = tc.thermostat_id
+                     AND sd.timestamp BETWEEN tc.start_timestamp AND tc.stop_timestamp
+    GROUP BY
+        tc.id
+) agg ON tc.id = agg.cycle_id;
 
 DROP VIEW IF EXISTS view_tstate_daily_runtime;
 CREATE VIEW view_tstate_daily_runtime AS
@@ -360,20 +381,27 @@ CREATE TABLE IF NOT EXISTS cycle_segments (
     segment_start INTEGER NOT NULL,       -- Unix timestamp (ms)
     segment_end INTEGER NOT NULL,         -- Unix timestamp (ms)
     segment_runtime INTEGER NOT NULL,     -- Duration in ms
-    run_hour TEXT NOT NULL,               -- 'YYYY-MM-DD HH:00:00'
+    segment_hour TEXT NOT NULL,           -- 'YYYY-MM-DD HH:00:00'
     FOREIGN KEY (thermostat_id) REFERENCES thermostats(id),
     FOREIGN KEY (cycle_id) REFERENCES tstate_cycles(id)
 );
 
 -- View for hourly runtime aggregation
-CREATE VIEW IF NOT EXISTS view_cycle_hourly_runtime AS
-SELECT 
-    thermostat_id,
-    run_hour,
-    SUM(segment_runtime) / 60000.0 AS total_runtime_minutes
-FROM cycle_segments
-GROUP BY thermostat_id, run_hour
-ORDER BY run_hour;
+DROP VIEW IF EXISTS view_cycle_hourly_runtime;
+CREATE VIEW view_cycle_hourly_runtime AS
+SELECT
+    cs.thermostat_id,
+    cs.segment_hour,
+    cs.segment_runtime / 60000.0 AS total_runtime_minutes,
+    AVG(sd.temp) AS avg_indoor_temp,
+    AVG(sd.outdoor_temp) AS avg_outdoor_temp,
+    AVG(sd.humidity) AS avg_indoor_humidity,
+    AVG(sd.outdoor_humidity) AS avg_outdoor_humidity
+FROM cycle_segments cs
+JOIN scan_data sd ON cs.thermostat_id = sd.thermostat_id
+    AND sd.timestamp >= cs.segment_start AND sd.timestamp <= cs.segment_end
+GROUP BY cs.thermostat_id, cs.segment_hour
+ORDER BY cs.segment_hour;
 
 CREATE TABLE IF NOT EXISTS compressors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -422,3 +450,11 @@ SELECT
 FROM thermostats t
 JOIN compressors c
   ON c.thermostat_id = t.id
+
+-- Shelly H/T Sensor Configuration
+CREATE TABLE IF NOT EXISTS shelly_sensors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thermostat_id INTEGER NOT NULL REFERENCES thermostats(id),
+    mqtt_topic TEXT NOT NULL,
+    UNIQUE(thermostat_id)
+);

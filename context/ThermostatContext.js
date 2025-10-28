@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState } from "react";
 import { useAuth } from "../context/AuthContext"; // Import the hook
 import { useWeather } from "../context/WeatherContext"; // Import the hook
 import { HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO } from '../constants/hvac_mode'; // Import HVAC modes
@@ -13,16 +13,16 @@ export const ThermostatProvider = ({ children }) => {
   const [thermostats, setThermostats] = useState({}); // Store multiple thermostats
   const [scannerStatus, setScannerStatus] = useState({}); // Store scanner statuses
 
-  const formatTime = useCallback(({ day, hour, minute }) => {
+  const formatTime = ({ day, hour, minute }) => {
     const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
     const AMPM = hour >= 12 ? "PM" : "AM";
     hour = hour % 12 || 12;
     return `${daysOfWeek[day]}, ${hour.toString().padStart(2, "0")}:${minute
       .toString()
       .padStart(2, "0")} ${AMPM}`;
-  }, []);
+  };
 
-  const formatCurrentTime = useCallback(() => {
+  const formatCurrentTime = () => {
     const now = new Date(Date.now());
     // Adjust day to match your format (0 = Monday, 6 = Sunday)
     const jsDay = now.getDay(); // JS: 0=Sunday, 1=Monday, ..., 6=Saturday
@@ -30,7 +30,7 @@ export const ThermostatProvider = ({ children }) => {
     let hour = now.getHours();
     const minute = now.getMinutes();
     return formatTime({ day, hour, minute });
-  }, [formatTime]);
+  };
 
   function decodeJwt(token) {
     if (!token) return null;
@@ -51,40 +51,8 @@ export const ThermostatProvider = ({ children }) => {
     return now >= payload.exp;
   }
 
-  function isNewerWeekdayTime(current, updated) {
-    const weekdays = [
-        'Sunday', 'Monday', 'Tuesday', 'Wednesday',
-        'Thursday', 'Friday', 'Saturday'
-    ];
-
-    const parseWeekdayTime = (str) => {
-        const [weekday, timePart] = str.split(',').map(s => s.trim());
-        if (!weekday || !timePart || !weekdays.includes(weekday)) return NaN;
-
-        const today = new Date();
-        const todayIndex = today.getDay();
-        const targetIndex = weekdays.indexOf(weekday);
-        const offsetDays = (targetIndex - todayIndex + 7) % 7;
-
-        const targetDate = new Date(today);
-        targetDate.setDate(today.getDate() + offsetDays);
-
-        const fullDateStr = `${targetDate.toDateString()} ${timePart}`;
-        const parsed = new Date(fullDateStr);
-        return parsed.getTime();
-    };
-
-    const updatedTime = parseWeekdayTime(updated);
-    const currentTime = parseWeekdayTime(current);
-
-    if (isNaN(updatedTime)) return false;
-    if (isNaN(currentTime)) return true;
-
-    return updatedTime > currentTime;
-  }
-
   // Update thermostat state
-  const updateThermostatState = useCallback((thermostatIp, updates) => {
+  const updateThermostatState = (thermostatIp, updates) => {
     setThermostats((prevState) => {
         const currentState = prevState[thermostatIp] || {};
         const hasChanges = Object.keys(updates).some(
@@ -96,18 +64,9 @@ export const ThermostatProvider = ({ children }) => {
         }
 
         const differences = Object.keys(updates).reduce((diff, key) => {
-            const current = currentState[key];
-            const updated = updates[key];
-            const isFormattedTime = key === 'formattedTime';
-            const isDifferent = current !== updated;
-            const isGreater = isFormattedTime
-                ? isNewerWeekdayTime(current, updated)
-                : true;
-
-            if (isDifferent && isGreater) {
-                diff[key] = { current, updated };
+            if (currentState[key] !== updates[key]) {
+                diff[key] = { current: currentState[key], updated: updates[key] };
             }
-
             return diff;
         }, {});
         Logger.debug(`Differences: ${JSON.stringify(differences, null, 2)}`, 'ThermostatContext', 'updateThermostatState');
@@ -121,7 +80,7 @@ export const ThermostatProvider = ({ children }) => {
             },
         };
     });
-  }, []);
+  };
 
   const updateThermostatName = async (thermostatIp, name, hostname) => {
     try {
@@ -195,7 +154,7 @@ export const ThermostatProvider = ({ children }) => {
     }
   };
 
-  const fetchThermostatData = useCallback(async (thermostatIp, hostname, timeout) => {
+  const fetchThermostatData = async (thermostatIp, hostname, timeout) => {
     if (!hostname || !thermostatIp || thermostatIp === "Loading ...") {
         Logger.warn("Hostname or thermostat IP not available yet!", 'ThermostatContext', 'fetchThermostatData');
         return null;
@@ -278,9 +237,9 @@ export const ThermostatProvider = ({ children }) => {
         Logger.error(`Error fetching thermostat data: ${error.message}`, 'ThermostatContext', 'fetchThermostatData');
         throw new Error("Failed to fetch thermostat data.");
     }
-  }, [authenticatedApiFetch, fetchWeather, formatTime, updateThermostatState]);
+  };
 
-  const getCurrentTemperature = useCallback(async (thermostatIp, hostname, useCache = true) => {
+  const getCurrentTemperature = async (thermostatIp, hostname, useCache = true) => {
     try {
         const currentThermostat = thermostats[thermostatIp];
 
@@ -305,7 +264,7 @@ export const ThermostatProvider = ({ children }) => {
         Logger.error(`Error getting current temperature: ${error.message}`, 'ThermostatContext', 'getCurrentTemperature');
         throw new Error("Failed to get current temperature.");
     }
-  }, [thermostats, fetchThermostatData]);
+  };
 
   const fetchModelInfo = async (thermostatIp, hostname) => {
     try {

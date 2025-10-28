@@ -1,57 +1,28 @@
-import React, { createContext, useState, useRef, useEffect, useCallback } from "react";
-import { useIsFocused } from "@react-navigation/native";
+import React, { createContext, useRef, useEffect, useCallback } from "react";
 
 const DataRefreshContext = createContext();
-const Logger = require('../components/Logger');
 
 export const DataRefreshProvider = ({ children }) => {
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const listenersRef = useRef(new Map());
-  const intervalRef = useRef(null);
-  const isFocused = useIsFocused();
+  const listenersRef = useRef([]);
 
   // Register a listener
-  const register = useCallback((id, listener) => {
-    Logger.info(`Registering data refresh listener: ${id}`, 'DataRefreshContext', 'register');
-    listenersRef.current.set(id, listener);
-  }, []);
-
-  const unregister = useCallback((id) => {
-    Logger.info(`Unregistering data refresh listener: ${id}`, 'DataRefreshContext', 'unregister');
-    listenersRef.current.delete(id);
+  const register = useCallback((listener) => {
+    listenersRef.current.push(listener);
+    return () => {
+      listenersRef.current = listenersRef.current.filter(l => l !== listener);
+    };
   }, []);
 
   // Timer to notify listeners every minute
   useEffect(() => {
-    const startTimer = () => {
-        if (!intervalRef.current) {
-            Logger.info("Starting timer", 'DataRefreshContext', 'startTimer');
-            intervalRef.current = setInterval(() => {
-                setLastUpdated(Date.now());
-                listenersRef.current.forEach(listener => listener());
-            }, 60000); // 1 minute
-        }
-    }
-
-    const stopTimer = () => {
-        if (intervalRef.current) {
-            Logger.info("Stopping timer", 'DataRefreshContext', 'stopTimer');
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-        }
-    }
-
-    if (isFocused) {
-        startTimer();
-    } else {
-        stopTimer();
-    }
-
-    return () => stopTimer();
-  }, [isFocused]);
+    const interval = setInterval(() => {
+      listenersRef.current.forEach(listener => listener());
+    }, 60000); // 1 minute
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <DataRefreshContext.Provider value={{ register, unregister, lastUpdated }}>
+    <DataRefreshContext.Provider value={{ register }}>
       {children}
     </DataRefreshContext.Provider>
   );

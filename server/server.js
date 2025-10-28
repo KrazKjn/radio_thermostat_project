@@ -13,4 +13,8 @@ app.use(bodyParser.raw({ type: 'application/octet-stream', limit: '10mb' })); //
 app.use('/', routes); // Mounts all routes at root path
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Proxy running at http://localhost:${PORT}`));
+app.listen(PORT, () => {
+    console.log(`Proxy running at http://localhost:${PORT}`);
+    const mqttClient = require('./mqttClient');
+    mqttClient.initialize();
+});

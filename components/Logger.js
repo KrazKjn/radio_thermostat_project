@@ -35,7 +35,7 @@ const colors = {
 };
 
 function beep(frequency = 1000, duration = 300) {
-  if (exec && process.platform === 'win32' && process.env.ENABLE_BEEP === 'true') {
+  if (exec) {
     exec(`powershell -c "[console]::beep(${frequency},${duration})"`);
   }
 }
@@ -44,7 +44,7 @@ function playSound(level, debug_level = 0) {
   if (level === 'error') {
     beep(2000, 300);
   }
-  if (level === 'debug' && debug_level <= LOG_DEBUG_LEVEL && process.platform === 'win32' && process.env.ENABLE_BEEP === 'true') {
+  if (level === 'debug' && debug_level <= LOG_DEBUG_LEVEL) {
     try {
       process.stdout.write('\u0007'); // Bell sound
     } catch (error) {

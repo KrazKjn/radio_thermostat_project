@@ -1,28 +1,29 @@
-import React, { useContext, useEffect, useState, useRef } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { View, ScrollView, Text, ActivityIndicator } from "react-native";
 import ThermostatDisplay from "./ThermostatDisplay";
 import { HostnameContext } from "../context/HostnameContext";
 import { useAuth } from "../context/AuthContext";
 import { useThermostat } from "../context/ThermostatContext";
-import DataRefreshContext from "../context/DataRefreshContext";
 import commonStyles from "../styles/commonStyles";
 
 const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
+    const { logout } = useAuth();
     const hostname = useContext(HostnameContext);
     const {
         thermostats,
         addThermostatInState,
         getCurrentTemperature,
         updateThermostatState,
+        updateThermostatTime,
+        rebootThermostatServer,
     } = useThermostat();
-    const { register, unregister } = useContext(DataRefreshContext);
     const thermostat = thermostats[thermostatIp];
-    const lastRefreshTimeRef = useRef(null);
+    const [menuOpen, setMenuOpen] = useState(false);
 
     useEffect(() => {
         if (!hostname) return;
 
-        const listenerId = `ThermostatControl-${thermostatIp}`;
+        const thermostat = thermostats[thermostatIp];
 
         if (!thermostat) {
             addThermostatInState(thermostatIp, {
@@ -46,26 +47,15 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
         } else {
             getCurrentTemperature(thermostatIp, hostname);
             if (thermostat.autoRefresh) {
-                const refreshFunc = () => {
-                    const now = Date.now();
-                    const intervalMs = thermostat.refreshInterval * 60 * 1000;
+                const interval = setInterval(() => {
+                    console.log(`[ThermostatControl] ${Date().toString()}: Timer triggered, refreshing temperature`);
+                    getCurrentTemperature(thermostatIp, hostname);
+                }, thermostat.refreshInterval * 60 * 1000);
 
-                    if (!lastRefreshTimeRef.current) {
-                        lastRefreshTimeRef.current = now;
-                    }
-
-                    if (now - lastRefreshTimeRef.current >= intervalMs) {
-                        console.log(`[ThermostatControl] ${new Date().toString()}: Timer triggered, refreshing temperature`);
-                        getCurrentTemperature(thermostatIp, hostname);
-                        lastRefreshTimeRef.current = now;
-                    }
-                };
-                register(listenerId, refreshFunc);
+                return () => clearInterval(interval);
             }
         }
-
-        return () => unregister(listenerId);
-    }, [thermostatIp, addThermostatInState, hostname, thermostat?.autoRefresh, thermostat?.refreshInterval, register, unregister]);
+    }, [thermostatIp, addThermostatInState, hostname]);
 
     // Hostname validation logic before loading
     if (!hostname || typeof hostname !== "string" || hostname.length < 3) {
@@ -102,9 +92,15 @@ const ThermostatControl = ({ thermostatIp, activeScreen, setActiveScreen }) => {
                         <ThermostatDisplay
                             thermostat={thermostat}
                             thermostatIp={thermostatIp}
+                            logout={logout}
                             hostname={hostname}
+                            getCurrentTemperature={getCurrentTemperature}
+                            updateThermostatTime={updateThermostatTime}
+                            rebootThermostatServer={rebootThermostatServer}
                             activeScreen={activeScreen}
                             setActiveScreen={setActiveScreen}
+                            menuOpen={menuOpen}
+                            setMenuOpen={setMenuOpen}
                         />
                     </>
                 )}

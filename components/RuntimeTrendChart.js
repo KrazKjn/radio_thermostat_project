@@ -22,24 +22,17 @@ const parseVoltage = (voltageStr) => {
 const calculateKwHDraw = (rla, voltage) =>
     rla ? (rla * voltage) / 1000 : 3.5;
 
-const formatMetric = (value, unit) =>
-  value != null ? `${value.toFixed(1)}${unit}` : '--';
-
 const mapDailyData = (dailyJson, costPerKwH, KwHDraw) =>
     dailyJson.map(d => {
     const cost = ((d.total_runtime_hr / 60) * costPerKwH * KwHDraw) || 0;
     return {
-        x: new Date(`${d.run_date} 12:00:00`).toLocaleDateString('en-US', {
+        x: new Date(d.run_date).toLocaleDateString('en-US', {
             weekday: 'short',
             month: '2-digit',
             day: '2-digit'
         }),
         y: d.total_runtime_hr,
-        label: `${d.total_runtime_hr.toFixed(1)} minutes
-            ${(d.total_runtime_hr / 60).toFixed(1)} hours
-            $${cost.toFixed(2)}
-            Temps: In ${formatMetric(d.avg_indoor_temp, ' F')}, Out ${formatMetric(d.avg_outdoor_temp, ' F')}
-            Humidity: In ${formatMetric(d.avg_indoor_humidity, '%')}, Out ${formatMetric(d.avg_outdoor_humidity, '%')}`
+        label: `${d.total_runtime_hr.toFixed(1)} minutes\n${(d.total_runtime_hr / 60).toFixed(1)} hours\n$${cost.toFixed(2)}`
     };
   });
 
@@ -58,11 +51,7 @@ const mapHourlyData = (hourlyJson, costPerKwH, KwHDraw) =>
     return {
         x: `${mm}/${dd} ${hhStr} ${period}`,
         y: d.total_runtime_minutes / 60.0,
-        label: `${d.total_runtime_minutes.toFixed(1)} minutes
-            ${(d.total_runtime_minutes / 60).toFixed(2)} hours
-            $${cost.toFixed(2)}
-            Temps: Indoor ${formatMetric(d.avg_indoor_temp, ' F')}, Outdoor ${formatMetric(d.avg_outdoor_temp, ' F')}
-            Humidity: Indoor ${formatMetric(d.avg_indoor_humidity, '%')}, Outdoor ${formatMetric(d.avg_outdoor_humidity, '%')}`
+        label: `${d.total_runtime_minutes.toFixed(1)} minutes\n${(d.total_runtime_minutes / 60).toFixed(2)} hours\n$${cost.toFixed(2)}`
     };
 });
 
@@ -72,10 +61,10 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
     const [dailyData, setDailyData] = useState([]);
     const [hourlyData, setHourlyData] = useState([]);
     const [viewMode, setViewMode] = useState('daily');
-    const [dayLimit, setDayLimit] = useState(7);
-    const [hourLimit, setHourLimit] = useState(24);
+    const [dayLimit, setDayLimit] = useState(14);
+    const [hourLimit, setHourLimit] = useState(48);
     const [thermostats, setThermostats] = useState([]);
-    const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+      const { width: windowWidth, height: windowHeight } = useWindowDimensions();
     const chartColors = getChartColors(isDarkMode);
     const chartWidth = windowWidth - 40;
     const chartHeight = windowHeight / 2;

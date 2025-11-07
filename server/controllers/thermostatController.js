@@ -126,13 +126,13 @@ const updateThermostat = async (req, res) => {
     }
 
     const payload = {
-        tmode: tmode === undefined ? undefined : Number(tmode), // ? Only set tmode if provided
-        fmode: fmode === undefined ? undefined : Number(fmode), // ? Only set fmode if provided
-        time: time || undefined, // ? Only set time if provided
-        ...(tmode === HVAC_MODE_HEAT && temperature ? { t_heat: Number(temperature) } : {}),
-        ...(tmode === HVAC_MODE_COOL && temperature ? { t_cool: Number(temperature) } : {}),
-        hold: hold === undefined ? undefined : Number(hold), // ? Only set hold if provided
-        override: override === undefined ? undefined : Number(override) // ? Only set override if provided
+        ...(tmode !== undefined ? { tmode: Number(tmode) } : {}),
+        ...(fmode !== undefined ? { fmode: Number(fmode) } : {}),
+        ...(time !== undefined && time !== null ? { time } : {}),
+        ...(tmode === HVAC_MODE_HEAT && temperature !== undefined ? { t_heat: Number(temperature) } : {}),
+        ...(tmode === HVAC_MODE_COOL && temperature !== undefined ? { t_cool: Number(temperature) } : {}),
+        ...(hold !== undefined ? { hold: Number(hold) } : {}),
+        ...(override !== undefined ? { override: Number(override) } : {})
     };
     Logger.debug(`POST body: ${JSON.stringify(payload, null, 2)}`, 'ThermostatController', 'updateThermostat', 2); // Log the post body
 
@@ -143,7 +143,7 @@ const updateThermostat = async (req, res) => {
             body: JSON.stringify(payload)
         });
   
-        const data = await response.json();
+        const text = (await response.text()).trim(); // Removes \r\n and whitespace
 
         // Ensure the token is passed when updating the cache
         const response2 = await fetch(`http://localhost:${process.env.PORT || 5000}/tstat/${ip}?noCache=true`, {
@@ -153,10 +153,26 @@ const updateThermostat = async (req, res) => {
             }
         });
 
-        const data2 = await response2.json();
+        const data = await response2.json();
 
-        Logger.debug(`Received POST response: ${req.url}: ${Logger.formatJSON(data)}`, 'ThermostatController', 'updateThermostat', 1);
-        res.json(data);
+        Logger.debug(`Received POST response: ${req.url}: ${text}`, 'ThermostatController', 'updateThermostat', 1);
+        if (text === "Tstat Command Processed") {
+            res.json({
+                status: "success",
+                message: "Tstat command processed successfully",
+                timestamp: Date.now(),
+                formatted: new Date().toISOString().replace('T', ' ').slice(0, 19),
+                result: text
+            });
+        } else {
+            res.status(500).json({
+                status: "error",
+                message: "Unexpected response from thermostat",
+                timestamp: Date.now(),
+                formatted: new Date().toISOString().replace('T', ' ').slice(0, 19),
+                result: text
+            });
+        }
     } catch (error) {
         Logger.error(`[Thermostat] Error Updating for IP ${ip}: ${error.message}`, 'ThermostatController', 'updateThermostat');
         res.status(500).json({ error: "Failed to update thermostat settings" });
@@ -1480,42 +1496,6 @@ const captureStatIn = async (req, res) => {
     }
 };
 
-// const getDailyRuntime = (req, res) => {
-//     try {
-//         const { ip } = req.params;
-//         const { days } = req.query;
-//         const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
-//         if (!thermostat) {
-//             return res.status(404).json({ error: "Thermostat not found" });
-//         }
-//         const limitClause = (days && Number(days) > 0) ? `LIMIT ?` : ``;
-//         const query = `
-//             SELECT 
-//                 date(start_timestamp / 1000, 'unixepoch', 'localtime') as run_date,
-//                 tmode,
-//                 SUM(run_time) AS total_runtime_hr,
-//                 AVG(avg_indoor_temp) AS avg_indoor_temp,
-//                 AVG(avg_outdoor_temp) AS avg_outdoor_temp,
-//                 AVG(avg_indoor_humidity) AS avg_indoor_humidity,
-//                 AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
-//             FROM view_tstate_cycles
-//             WHERE thermostat_id = ?
-//             GROUP BY run_date, tmode
-//             ORDER BY run_date DESC, tmode
-//             ${limitClause};
-//         `;
-
-//         const rows = (limitClause)
-//             ? db.prepare(query).all(thermostat.id, Number(days))
-//             : db.prepare(query).all(thermostat.id);
-
-//         res.json(rows.reverse());
-//     } catch (error) {
-//         Logger.error(`Error in getDailyRuntime: ${error.message}`, 'ThermostatController', 'getDailyRuntime');
-//         res.status(500).json({ error: 'Failed to retrieve daily runtime data' });
-//     }
-// };
-
 const getDailyRuntime = (req, res) => {
   try {
     const { ip } = req.params;
@@ -1527,90 +1507,70 @@ const getDailyRuntime = (req, res) => {
     }
 
     const hasLimit = days && Number(days) > 0;
-    const limitClause = hasLimit ? `LIMIT ?` : ``;
+    const limitWhere = hasLimit ? `AND start_timestamp >= (strftime('%s', 'now', '-${Number(days)} days') * 1000)` : ``;
 
     const query = `
         SELECT * FROM (
             SELECT 
-                date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+                run_date,
                 tmode,
-                SUM(run_time) AS total_runtime_hr,
+                SUM(run_time) AS total_runtime_minutes,
                 AVG(avg_indoor_temp) AS avg_indoor_temp,
                 AVG(avg_outdoor_temp) AS avg_outdoor_temp,
                 AVG(avg_indoor_humidity) AS avg_indoor_humidity,
                 AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
             FROM view_tstate_cycles
             WHERE thermostat_id = ?
+                ${limitWhere}
             GROUP BY run_date, tmode
             ORDER BY run_date DESC, tmode
-            ${limitClause}
         )
 
         UNION ALL
 
         SELECT * FROM (
             SELECT 
-                date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+                run_date,
                 0 AS tmode,
-                SUM(run_time) AS total_runtime_hr,
+                SUM(run_time) AS total_runtime_minutes,
                 AVG(avg_indoor_temp) AS avg_indoor_temp,
                 AVG(avg_outdoor_temp) AS avg_outdoor_temp,
                 AVG(avg_indoor_humidity) AS avg_indoor_humidity,
                 AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
             FROM view_fstate_cycles
             WHERE thermostat_id = ?
-            GROUP BY run_date
-            ORDER BY run_date DESC
-            ${limitClause}
+                ${limitWhere}
+            GROUP BY run_date, tmode
+            ORDER BY run_date DESC, tmode
         );
     `;
 
-    const rows = hasLimit
-      ? db.prepare(query).all(thermostat.id, Number(days), thermostat.id, Number(days))
-      : db.prepare(query).all(thermostat.id, thermostat.id);
+    const rows = db.prepare(query).all(thermostat.id, thermostat.id);
 
-    res.json(rows.reverse());
+    //res.json(rows.reverse());
+    // --- Transform rows into { run_date, HVAC, FAN } format ---
+    const grouped = new Map();
+
+    for (const row of rows) {
+        const { run_date, tmode, ...rest } = row;
+        if (!grouped.has(run_date)) {
+            grouped.set(run_date, { run_date });
+        }
+
+        const entry = grouped.get(run_date);
+        if (tmode === 0) {
+            entry.FAN = { tmode, ...rest };
+        } else {
+            entry.HVAC = { tmode, ...rest };
+        }
+    }
+
+    res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error in getDailyRuntime: ${error.message}`, 'ThermostatController', 'getDailyRuntime');
     res.status(500).json({ error: 'Failed to retrieve daily runtime data' });
   }
 };
-
-// const getDailyModeRuntime = (req, res) => {
-//     try {
-//         const { ip } = req.params;
-//         const { days } = req.query;
-//         const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
-//         if (!thermostat) {
-//             return res.status(404).json({ error: "Thermostat not found" });
-//         }
-//         const limitClause = (days && Number(days) > 0) ? `LIMIT ?` : ``;
-//         const query = `
-//             SELECT 
-//                 date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
-//                 tmode,
-//                 SUM(run_time) AS total_runtime_hr,
-//                 AVG(avg_indoor_temp) AS avg_indoor_temp,
-//                 AVG(avg_outdoor_temp) AS avg_outdoor_temp,
-//                 AVG(avg_indoor_humidity) AS avg_indoor_humidity,
-//                 AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
-//             FROM view_tstate_cycles
-//             WHERE thermostat_id = ?
-//             GROUP BY run_date, tmode
-//             ORDER BY run_date DESC, tmode
-//             ${limitClause};
-//         `;
-
-//         const rows = (limitClause)
-//             ? db.prepare(query).all(thermostat.id, Number(days))
-//             : db.prepare(query).all(thermostat.id);
-
-//         res.json(rows.reverse());
-//     } catch (error) {
-//         Logger.error(`Error: ${error.message}`, 'ThermostatController', 'getDailyModeRuntime');
-//         res.status(500).json({ error: 'Failed to retrieve daily mode runtime data' });
-//     }
-// };
 
 const getDailyModeRuntime = (req, res) => {
   try {
@@ -1623,22 +1583,22 @@ const getDailyModeRuntime = (req, res) => {
     }
 
     const hasLimit = days && Number(days) > 0;
-    const limitClause = hasLimit ? `LIMIT ?` : ``;
+    const limitWhere = hasLimit ? `AND start_timestamp >= (strftime('%s', 'now', '-${Number(days)} days') * 1000)` : ``;
 
     const query = `
       SELECT 
         run_date,
         tmode,
-        SUM(total_runtime_hr) AS total_runtime_hr,
+        SUM(total_runtime_minutes) AS total_runtime_minutes,
         AVG(avg_indoor_temp) AS avg_indoor_temp,
         AVG(avg_outdoor_temp) AS avg_outdoor_temp,
         AVG(avg_indoor_humidity) AS avg_indoor_humidity,
         AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
       FROM (
         SELECT 
-          date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+          run_date,
           tmode,
-          run_time AS total_runtime_hr,
+          run_time AS total_runtime_minutes,
           avg_indoor_temp,
           avg_outdoor_temp,
           avg_indoor_humidity,
@@ -1646,16 +1606,16 @@ const getDailyModeRuntime = (req, res) => {
         FROM (
           SELECT * FROM view_tstate_cycles
           WHERE thermostat_id = ?
+            ${limitWhere}
           ORDER BY start_timestamp DESC
-          ${limitClause}
         )
 
         UNION ALL
 
         SELECT 
-          date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+          run_date,
           0 AS tmode,
-          run_time AS total_runtime_hr,
+          run_time AS total_runtime_minutes,
           avg_indoor_temp,
           avg_outdoor_temp,
           avg_indoor_humidity,
@@ -1663,19 +1623,35 @@ const getDailyModeRuntime = (req, res) => {
         FROM (
           SELECT * FROM view_fstate_cycles
           WHERE thermostat_id = ?
+            ${limitWhere}
           ORDER BY start_timestamp DESC
-          ${limitClause}
         )
       )
       GROUP BY run_date, tmode
       ORDER BY run_date DESC, tmode;
     `;
 
-    const rows = hasLimit
-      ? db.prepare(query).all(thermostat.id, Number(days), thermostat.id, Number(days))
-      : db.prepare(query).all(thermostat.id, thermostat.id);
+    const rows = db.prepare(query).all(thermostat.id, thermostat.id);
 
-    res.json(rows.reverse());
+    //res.json(rows.reverse());
+    // --- Transform rows into { run_date, HVAC, FAN } format ---
+    const grouped = new Map();
+
+    for (const row of rows) {
+        const { run_date, tmode, ...rest } = row;
+        if (!grouped.has(run_date)) {
+            grouped.set(run_date, { run_date });
+        }
+
+        const entry = grouped.get(run_date);
+        if (tmode === 0) {
+            entry.FAN = { tmode, ...rest };
+        } else {
+            entry.HVAC = { tmode, ...rest };
+        }
+    }
+
+    res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error: ${error.message}`, 'ThermostatController', 'getDailyModeRuntime');
     res.status(500).json({ error: 'Failed to retrieve daily mode runtime data' });
@@ -1794,7 +1770,7 @@ const getHourlyEnv = (req, res) => {
             )
             SELECT 
               datetime(strftime('%Y-%m-%d %H:00', c.start_timestamp / 1000, 'unixepoch', 'localtime')) AS run_hour,
-              SUM(c.run_time) AS total_runtime_hr,
+              SUM(c.run_time) AS total_runtime_minutes,
               e.avg_outdoor_temp,
               e.min_outdoor_temp,
               e.max_outdoor_temp,
@@ -1832,35 +1808,36 @@ const getFanVsHvacDaily = (req, res) => {
         if (!thermostat) {
             return res.status(404).json({ error: "Thermostat not found" });
         }
-        const limitClause = (days && Number(days) > 0) ? `LIMIT ?` : ``;
+        const hasLimit = days && Number(days) > 0;
+        const limitWhere = hasLimit ? `AND start_timestamp >= (strftime('%s', 'now', '-${Number(days)} days') * 1000)` : ``;
+
         const query = `
             SELECT
-            t.run_date,
-            t.hvac_runtime_hr,
-            f.fan_runtime_hr
+                t.run_date,
+                t.hvac_runtime_minutes,
+                f.fan_runtime_minutes
             FROM (
             SELECT
                 date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
-                SUM(run_time) AS hvac_runtime_hr
+                SUM(run_time) AS hvac_runtime_minutes
             FROM tstate_cycles
             WHERE thermostat_id = ?
+                ${limitWhere}
             GROUP BY run_date
             ) t
             LEFT JOIN (
-            SELECT
-                date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
-                SUM(run_time) AS fan_runtime_hr
-            FROM fstate_cycles
-            WHERE thermostat_id = ?
-            GROUP BY run_date
+                SELECT
+                    date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+                    SUM(run_time) AS fan_runtime_minutes
+                FROM fstate_cycles
+                WHERE thermostat_id = ?
+                    ${limitWhere}
+                GROUP BY run_date
             ) f ON t.run_date = f.run_date
-            ORDER BY t.run_date DESC
-            ${limitClause};
+            ORDER BY t.run_date DESC;
         `;
 
-        const rows = (limitClause)
-            ? db.prepare(query).all(thermostat.id, thermostat.id, Number(days))
-            : db.prepare(query).all(thermostat.id, thermostat.id);
+        const rows = db.prepare(query).all(thermostat.id, thermostat.id);
 
         res.json(rows.reverse());
     } catch (error) {
@@ -1882,42 +1859,6 @@ const getTempVsRuntime = (req, res) => {
     }
 };
 
-// const getDailyCycles = (req, res) => {
-//     try {
-//         const { ip } = req.params;
-//         const { days } = req.query;
-//         const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
-//         if (!thermostat) {
-//             return res.status(404).json({ error: "Thermostat not found" });
-//         }
-//         const limitClause = (days && Number(days) > 0) ? `LIMIT ?` : ``;
-//         const query = `
-//             SELECT
-//                 date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
-//                 COUNT(*) AS cycle_count,
-//                 SUM(run_time) AS total_runtime_minutes,
-//                 AVG(avg_indoor_temp) AS avg_indoor_temp,
-//                 AVG(avg_outdoor_temp) AS avg_outdoor_temp,
-//                 AVG(avg_indoor_humidity) AS avg_indoor_humidity,
-//                 AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
-//             FROM view_tstate_cycles
-//             WHERE thermostat_id = ?
-//             GROUP BY run_date
-//             ORDER BY run_date DESC
-//             ${limitClause};
-//         `;
-
-//         const rows = (limitClause)
-//             ? db.prepare(query).all(thermostat.id, Number(days))
-//             : db.prepare(query).all(thermostat.id);
-
-//         res.json(rows.reverse());
-//     } catch (error) {
-//         Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
-//         res.status(500).json({ error: 'Failed to retrieve daily cycles data' });
-//     }
-// };
-
 const getDailyCycles = (req, res) => {
   try {
     const { ip } = req.params;
@@ -1929,12 +1870,13 @@ const getDailyCycles = (req, res) => {
     }
 
     const hasLimit = days && Number(days) > 0;
-    const limitClause = hasLimit ? `LIMIT ?` : ``;
+    const limitWhere = hasLimit ? `AND start_timestamp >= (strftime('%s', 'now', '-${Number(days)} days') * 1000)` : ``;
 
     const query = `
       SELECT
         run_date,
         COUNT(*) AS cycle_count,
+        tmode,
         SUM(total_runtime_minutes) AS total_runtime_minutes,
         AVG(avg_indoor_temp) AS avg_indoor_temp,
         AVG(avg_outdoor_temp) AS avg_outdoor_temp,
@@ -1942,7 +1884,8 @@ const getDailyCycles = (req, res) => {
         AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
       FROM (
         SELECT
-          date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+          run_date,
+          tmode,
           run_time AS total_runtime_minutes,
           avg_indoor_temp,
           avg_outdoor_temp,
@@ -1951,14 +1894,15 @@ const getDailyCycles = (req, res) => {
         FROM (
           SELECT * FROM view_tstate_cycles
           WHERE thermostat_id = ?
+            ${limitWhere}
           ORDER BY start_timestamp DESC
-          ${limitClause}
         )
 
         UNION ALL
 
         SELECT
-          date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+          run_date,
+          0 AS tmode,
           run_time AS total_runtime_minutes,
           avg_indoor_temp,
           avg_outdoor_temp,
@@ -1967,61 +1911,39 @@ const getDailyCycles = (req, res) => {
         FROM (
           SELECT * FROM view_fstate_cycles
           WHERE thermostat_id = ?
+            ${limitWhere}
           ORDER BY start_timestamp DESC
-          ${limitClause}
         )
       )
-      GROUP BY run_date
-      ORDER BY run_date DESC;
+      GROUP BY run_date, tmode
+      ORDER BY run_date DESC, tmode;
     `;
 
-    const rows = hasLimit
-      ? db.prepare(query).all(thermostat.id, Number(days), thermostat.id, Number(days))
-      : db.prepare(query).all(thermostat.id, thermostat.id);
+    const rows = db.prepare(query).all(thermostat.id, thermostat.id);
 
-    res.json(rows.reverse());
+    // --- Transform rows into { run_date, HVAC, FAN } format ---
+    const grouped = new Map();
+
+    for (const row of rows) {
+        const { run_date, tmode, ...rest } = row;
+        if (!grouped.has(run_date)) {
+            grouped.set(run_date, { run_date });
+        }
+
+        const entry = grouped.get(run_date);
+        if (tmode === 0) {
+            entry.FAN = { tmode, ...rest };
+        } else {
+            entry.HVAC = { tmode, ...rest };
+        }
+    }
+
+    res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
     res.status(500).json({ error: 'Failed to retrieve daily cycles data' });
   }
 };
-
-// const getHourlyCycles = (req, res) => {
-//     try {
-//         const { ip } = req.params;
-//         const { hours } = req.query;
-//         const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
-//         if (!thermostat) {
-//             return res.status(404).json({ error: "Thermostat not found" });
-//         }
-//         const limitClause = (hours && Number(hours) > 0) ? `LIMIT ?` : ``;
-//         const query = `
-//             SELECT
-//                 date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
-//                 strftime('%H', start_timestamp / 1000, 'unixepoch', 'localtime') AS hour,
-//                 COUNT(*) AS cycle_count,
-//                 SUM(run_time) AS total_runtime_minutes,
-//                 AVG(avg_indoor_temp) AS avg_indoor_temp,
-//                 AVG(avg_outdoor_temp) AS avg_outdoor_temp,
-//                 AVG(avg_indoor_humidity) AS avg_indoor_humidity,
-//                 AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
-//             FROM view_tstate_cycles
-//             WHERE thermostat_id = ? AND stop_timestamp IS NOT NULL
-//             GROUP BY run_date, hour
-//             ORDER BY run_date DESC, hour DESC
-//             ${limitClause};
-//         `;
-
-//         const rows = (limitClause)
-//             ? db.prepare(query).all(thermostat.id, Number(hours))
-//             : db.prepare(query).all(thermostat.id);
-
-//         res.json(rows.reverse());
-//     } catch (error) {
-//         Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
-//         res.status(500).json({ error: 'Failed to retrieve daily cycles data' });
-//     }
-// };
 
 const getHourlyCycles = (req, res) => {
   try {
@@ -2049,7 +1971,7 @@ const getHourlyCycles = (req, res) => {
             AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
         FROM (
             SELECT
-                date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+                run_date,
                 strftime('%H', start_timestamp / 1000, 'unixepoch', 'localtime') AS hour,
                 tmode,
                 run_time AS total_runtime_minutes,
@@ -2067,7 +1989,7 @@ const getHourlyCycles = (req, res) => {
             UNION ALL
 
             SELECT
-                date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+                run_date,
                 strftime('%H', start_timestamp / 1000, 'unixepoch', 'localtime') AS hour,
                 0 AS tmode,
                 run_time AS total_runtime_minutes,
@@ -2082,15 +2004,32 @@ const getHourlyCycles = (req, res) => {
                 ${limitClause}
             )
         )
-        GROUP BY run_date, hour
-        ORDER BY run_date DESC, hour DESC;
+        GROUP BY run_date, hour, tmode
+        ORDER BY run_date DESC, hour DESC, tmode;
     `;
 
     const rows = hasLimit
       ? db.prepare(query).all(thermostat.id, Number(hours), thermostat.id, Number(hours))
       : db.prepare(query).all(thermostat.id, thermostat.id);
 
-    res.json(rows.reverse());
+    // --- Transform rows into { run_date, HVAC, FAN } format ---
+    const grouped = new Map();
+
+    for (const row of rows) {
+        const { run_date, tmode, ...rest } = row;
+        if (!grouped.has(run_date)) {
+            grouped.set(run_date, { run_date });
+        }
+
+        const entry = grouped.get(run_date);
+        if (tmode === 0) {
+            entry.FAN = { tmode, ...rest };
+        } else {
+            entry.HVAC = { tmode, ...rest };
+        }
+    }
+
+    res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error in getHourlyCycles: ${error.message}`, 'ThermostatController', 'getHourlyCycles');
     res.status(500).json({ error: 'Failed to retrieve hourly cycles data' });

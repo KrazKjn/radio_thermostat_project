@@ -304,6 +304,7 @@ SELECT
     fc.*,
     strftime('%Y-%m-%d %I:%M %p', fc.start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
     strftime('%Y-%m-%d %I:%M %p', fc.stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local,
+  	date(fc.start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
     agg.avg_indoor_temp,
     agg.avg_outdoor_temp,
     agg.avg_indoor_humidity,
@@ -324,7 +325,8 @@ LEFT JOIN (
                      AND sd.timestamp BETWEEN fc.start_timestamp AND fc.stop_timestamp
     GROUP BY
         fc.id
-) agg ON fc.id = agg.cycle_id;
+) agg ON fc.id = agg.cycle_id
+ORDER BY start_timestamp ASC;
 
 DROP VIEW IF EXISTS view_tstate_cycles;
 CREATE VIEW view_tstate_cycles AS
@@ -332,6 +334,7 @@ SELECT
     tc.*,
     strftime('%Y-%m-%d %I:%M %p', tc.start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
     strftime('%Y-%m-%d %I:%M %p', tc.stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local,
+  	date(tc.start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
     agg.avg_indoor_temp,
     agg.avg_outdoor_temp,
     agg.avg_indoor_humidity,
@@ -352,14 +355,15 @@ LEFT JOIN (
                      AND sd.timestamp BETWEEN tc.start_timestamp AND tc.stop_timestamp
     GROUP BY
         tc.id
-) agg ON tc.id = agg.cycle_id;
+) agg ON tc.id = agg.cycle_id
+ORDER BY start_timestamp ASC;
 
 DROP VIEW IF EXISTS view_tstate_daily_runtime;
 CREATE VIEW view_tstate_daily_runtime AS
 SELECT 
   date(start_timestamp / 1000, 'unixepoch', 'localtime') as run_date,
   tmode,
-  SUM(run_time) AS total_runtime_hr,
+  SUM(run_time) AS total_runtime_minutes,
   AVG(avg_indoor_temp) AS avg_indoor_temp,
   AVG(avg_outdoor_temp) AS avg_outdoor_temp,
   AVG(avg_indoor_humidity) AS avg_indoor_humidity,
@@ -383,7 +387,7 @@ CREATE VIEW view_tstate_hourly_runtime_today AS
 SELECT 
   datetime(strftime('%Y-%m-%d %H:00', start_timestamp / 1000, 'unixepoch', 'localtime')) AS run_hour,
   tmode,
-  SUM(run_time) AS total_runtime_hr
+  SUM(run_time) AS total_runtime_minutes
 FROM tstate_cycles
 GROUP BY run_hour, tmode
 ORDER BY run_hour, tmode;
@@ -408,7 +412,7 @@ WITH hourly_env AS (
 SELECT 
   datetime(strftime('%Y-%m-%d %H:00', c.start_timestamp / 1000, 'unixepoch', 'localtime')) AS run_hour,
   c.tmode,
-  SUM(c.run_time) AS total_runtime_hr,
+  SUM(c.run_time) AS total_runtime_minutes,
   e.avg_outdoor_temp,
   e.min_outdoor_temp,
   e.max_outdoor_temp,
@@ -428,10 +432,10 @@ DROP VIEW IF EXISTS view_fan_vs_hvac_daily;
 CREATE VIEW view_fan_vs_hvac_daily AS
 SELECT 
   date(t.start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
-  SUM(t.run_time) AS hvac_runtime_hr,
-  SUM(CASE WHEN t.tmode = 1 THEN t.run_time ELSE 0 END) AS heating_runtime_hr,
-  SUM(CASE WHEN t.tmode = 2 THEN t.run_time ELSE 0 END) AS cooling_runtime_hr,
-  SUM(f.run_time) AS fan_runtime_hr
+  SUM(t.run_time) AS hvac_runtime_minutes,
+  SUM(CASE WHEN t.tmode = 1 THEN t.run_time ELSE 0 END) AS heating_runtime_minutes,
+  SUM(CASE WHEN t.tmode = 2 THEN t.run_time ELSE 0 END) AS cooling_runtime_minutes,
+  SUM(f.run_time) AS fan_runtime_minutes
 FROM tstate_cycles t
 JOIN fstate_cycles f
   ON date(t.start_timestamp / 1000, 'unixepoch', 'localtime') =

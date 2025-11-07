@@ -28,6 +28,7 @@ const authenticateToken = (req, res, next) => {
 
 // Sliding session: refresh token middleware
 const refreshTokenMiddleware = (req, res, next) => {
+    const debugLevel = Number.isFinite(Number(req.query?.debugLevel)) ? Number(req.query.debugLevel) : 6;
     if (req.user) {
         const authHeader = req.headers['authorization'];
         const currentToken = authHeader && authHeader.startsWith('Bearer ')
@@ -46,7 +47,7 @@ const refreshTokenMiddleware = (req, res, next) => {
                     Logger.warn("Token will expire in 15 minutes or less.", 'auth', 'refreshTokenMiddleware');
                     renewToken = true;
                 }
-                Logger.debug(`Current token expires at: ${expDate.toLocaleString()}`, 'auth', 'refreshTokenMiddleware');
+                Logger.debug(`Current token expires at: ${expDate.toLocaleString()}`, 'auth', 'refreshTokenMiddleware', debugLevel);
             } else {
                 Logger.warn("Current token does not contain an expiration (exp) claim.", 'auth', 'refreshTokenMiddleware');
             }
@@ -66,7 +67,7 @@ const refreshTokenMiddleware = (req, res, next) => {
 
             if (decoded && decoded.exp) {
                 const expDate = new Date(decoded.exp * 1000); // Convert from seconds to milliseconds
-                Logger.debug(`Header updated with x-refreshed-token expiring: ${expDate.toLocaleString()}`, 'auth', 'refreshTokenMiddleware');
+                Logger.debug(`Header updated with x-refreshed-token expiring: ${expDate.toLocaleString()}`, 'auth', 'refreshTokenMiddleware', );
             } else {
                 Logger.warn("Token does not contain an expiration (exp) claim.", 'auth', 'refreshTokenMiddleware');
             }

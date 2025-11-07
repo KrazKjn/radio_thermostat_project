@@ -185,12 +185,45 @@ FROM readings_with_next
 WHERE next_ts IS NOT NULL
 GROUP BY day, ip;
 
+-- DROP TRIGGER IF EXISTS log_tstate_cycle;
+-- CREATE TRIGGER log_tstate_cycle
+-- AFTER INSERT ON scan_data
+-- FOR EACH ROW
+-- BEGIN
+--     -- Case 1: INSERT new cycle if tstate = 1 and no open cycle exists
+--     INSERT INTO tstate_cycles (
+--         thermostat_id,
+--         tmode,
+--         start_timestamp,
+--         start_time
+--     )
+--     SELECT
+--         NEW.thermostat_id,
+--         NEW.tmode,
+--         NEW.timestamp,
+--         datetime(NEW.timestamp / 1000, 'unixepoch')
+--     WHERE NEW.tstate != 0
+--       AND NOT EXISTS (
+--           SELECT 1 FROM tstate_cycles
+--           WHERE thermostat_id = NEW.thermostat_id
+--             AND stop_timestamp IS NULL
+--       );
+
+--     -- Case 2: UPDATE last open cycle if tstate = 0
+--     UPDATE tstate_cycles
+--     SET stop_timestamp = NEW.timestamp,
+--         stop_time = datetime(NEW.timestamp / 1000, 'unixepoch'),
+--         run_time = ROUND((NEW.timestamp - start_timestamp) / 60000.0, 2)
+--     WHERE thermostat_id = NEW.thermostat_id
+--       AND stop_timestamp IS NULL
+--       AND NEW.tstate = 0;
+-- END;
 DROP TRIGGER IF EXISTS log_tstate_cycle;
 CREATE TRIGGER log_tstate_cycle
 AFTER INSERT ON scan_data
 FOR EACH ROW
 BEGIN
-    -- Case 1: INSERT new cycle if tstate = 1 and no open cycle exists
+    -- Case 1: INSERT new heating or cooling cycle if tstate = 1 and no open cycle of same tmode exists
     INSERT INTO tstate_cycles (
         thermostat_id,
         tmode,
@@ -202,19 +235,22 @@ BEGIN
         NEW.tmode,
         NEW.timestamp,
         datetime(NEW.timestamp / 1000, 'unixepoch')
-    WHERE NEW.tstate != 0
+    WHERE NEW.tstate = 1
+      AND NEW.tmode IN (1, 2)
       AND NOT EXISTS (
           SELECT 1 FROM tstate_cycles
           WHERE thermostat_id = NEW.thermostat_id
+            AND tmode = NEW.tmode
             AND stop_timestamp IS NULL
       );
 
-    -- Case 2: UPDATE last open cycle if tstate = 0
+    -- Case 2: UPDATE last open cycle of matching tmode if tstate = 0
     UPDATE tstate_cycles
     SET stop_timestamp = NEW.timestamp,
         stop_time = datetime(NEW.timestamp / 1000, 'unixepoch'),
         run_time = ROUND((NEW.timestamp - start_timestamp) / 60000.0, 2)
     WHERE thermostat_id = NEW.thermostat_id
+      AND tmode = NEW.tmode
       AND stop_timestamp IS NULL
       AND NEW.tstate = 0;
 END;
@@ -264,45 +300,93 @@ FROM user_sessions
 
 DROP VIEW IF EXISTS view_fstate_cycles;
 CREATE VIEW view_fstate_cycles AS
-SELECT *,
-	strftime('%Y-%m-%d %I:%M %p', start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
-	strftime('%Y-%m-%d %I:%M %p', stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local
-FROM fstate_cycles
+SELECT
+    fc.*,
+    strftime('%Y-%m-%d %I:%M %p', fc.start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
+    strftime('%Y-%m-%d %I:%M %p', fc.stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local,
+    agg.avg_indoor_temp,
+    agg.avg_outdoor_temp,
+    agg.avg_indoor_humidity,
+    agg.avg_outdoor_humidity
+FROM
+    fstate_cycles fc
+LEFT JOIN (
+    SELECT
+        fc.id AS cycle_id,
+        AVG(sd.temp) AS avg_indoor_temp,
+        AVG(sd.outdoor_temp) AS avg_outdoor_temp,
+        AVG(sd.humidity) AS avg_indoor_humidity,
+        AVG(sd.outdoor_humidity) AS avg_outdoor_humidity
+    FROM
+        fstate_cycles fc
+    JOIN
+        scan_data sd ON sd.thermostat_id = fc.thermostat_id
+                     AND sd.timestamp BETWEEN fc.start_timestamp AND fc.stop_timestamp
+    GROUP BY
+        fc.id
+) agg ON fc.id = agg.cycle_id;
 
 DROP VIEW IF EXISTS view_tstate_cycles;
 CREATE VIEW view_tstate_cycles AS
-SELECT *,
-	strftime('%Y-%m-%d %I:%M %p', start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
-	strftime('%Y-%m-%d %I:%M %p', stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local
-FROM tstate_cycles
+SELECT
+    tc.*,
+    strftime('%Y-%m-%d %I:%M %p', tc.start_timestamp / 1000, 'unixepoch', 'localtime') AS start_local,
+    strftime('%Y-%m-%d %I:%M %p', tc.stop_timestamp / 1000, 'unixepoch', 'localtime') AS stop_local,
+    agg.avg_indoor_temp,
+    agg.avg_outdoor_temp,
+    agg.avg_indoor_humidity,
+    agg.avg_outdoor_humidity
+FROM
+    tstate_cycles tc
+LEFT JOIN (
+    SELECT
+        tc.id AS cycle_id,
+        AVG(sd.temp) AS avg_indoor_temp,
+        AVG(sd.outdoor_temp) AS avg_outdoor_temp,
+        AVG(sd.humidity) AS avg_indoor_humidity,
+        AVG(sd.outdoor_humidity) AS avg_outdoor_humidity
+    FROM
+        tstate_cycles tc
+    JOIN
+        scan_data sd ON sd.thermostat_id = tc.thermostat_id
+                     AND sd.timestamp BETWEEN tc.start_timestamp AND tc.stop_timestamp
+    GROUP BY
+        tc.id
+) agg ON tc.id = agg.cycle_id;
 
 DROP VIEW IF EXISTS view_tstate_daily_runtime;
 CREATE VIEW view_tstate_daily_runtime AS
 SELECT 
   date(start_timestamp / 1000, 'unixepoch', 'localtime') as run_date,
-  SUM(run_time) AS total_runtime_hr
-FROM tstate_cycles
-GROUP BY run_date
-ORDER BY run_date;
-
-DROP VIEW IF EXISTS view_tstate_daily_mode_runtime;
-CREATE VIEW view_tstate_daily_mode_runtime AS
-SELECT 
-  date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
   tmode,
-  SUM(run_time) AS total_runtime_hr
+  SUM(run_time) AS total_runtime_hr,
+  AVG(avg_indoor_temp) AS avg_indoor_temp,
+  AVG(avg_outdoor_temp) AS avg_outdoor_temp,
+  AVG(avg_indoor_humidity) AS avg_indoor_humidity,
+  AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
 FROM tstate_cycles
 GROUP BY run_date, tmode
 ORDER BY run_date, tmode;
+
+DROP VIEW IF EXISTS view_tstate_daily_mode_runtime;
+-- CREATE VIEW view_tstate_daily_mode_runtime AS
+-- SELECT 
+--   date(start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
+--   tmode,
+--   SUM(run_time) AS total_runtime_hr
+-- FROM tstate_cycles
+-- GROUP BY run_date, tmode
+-- ORDER BY run_date, tmode;
 
 DROP VIEW IF EXISTS view_tstate_hourly_runtime_today;
 CREATE VIEW view_tstate_hourly_runtime_today AS
 SELECT 
   datetime(strftime('%Y-%m-%d %H:00', start_timestamp / 1000, 'unixepoch', 'localtime')) AS run_hour,
+  tmode,
   SUM(run_time) AS total_runtime_hr
 FROM tstate_cycles
-GROUP BY run_hour
-ORDER BY run_hour;
+GROUP BY run_hour, tmode
+ORDER BY run_hour, tmode;
 
 DROP VIEW IF EXISTS view_tstate_hourly_env;
 CREATE VIEW view_tstate_hourly_env AS
@@ -323,6 +407,7 @@ WITH hourly_env AS (
 )
 SELECT 
   datetime(strftime('%Y-%m-%d %H:00', c.start_timestamp / 1000, 'unixepoch', 'localtime')) AS run_hour,
+  c.tmode,
   SUM(c.run_time) AS total_runtime_hr,
   e.avg_outdoor_temp,
   e.min_outdoor_temp,
@@ -336,14 +421,16 @@ SELECT
 FROM tstate_cycles c
 LEFT JOIN hourly_env e
   ON datetime(strftime('%Y-%m-%d %H:00', c.start_timestamp / 1000, 'unixepoch', 'localtime')) = e.env_hour
-GROUP BY run_hour
-ORDER BY run_hour;
+GROUP BY run_hour, c.tmode
+ORDER BY run_hour, c.tmode;
 
 DROP VIEW IF EXISTS view_fan_vs_hvac_daily;
 CREATE VIEW view_fan_vs_hvac_daily AS
 SELECT 
   date(t.start_timestamp / 1000, 'unixepoch', 'localtime') AS run_date,
   SUM(t.run_time) AS hvac_runtime_hr,
+  SUM(CASE WHEN t.tmode = 1 THEN t.run_time ELSE 0 END) AS heating_runtime_hr,
+  SUM(CASE WHEN t.tmode = 2 THEN t.run_time ELSE 0 END) AS cooling_runtime_hr,
   SUM(f.run_time) AS fan_runtime_hr
 FROM tstate_cycles t
 JOIN fstate_cycles f
@@ -356,28 +443,39 @@ ORDER BY run_date;
 CREATE TABLE IF NOT EXISTS cycle_segments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     thermostat_id INTEGER NOT NULL,
-    cycle_id INTEGER NOT NULL,
+    tcycle_id INTEGER,
+    fcycle_id INTEGER,
+    tmode INTEGER NOT NULL,               -- 1 = heat, 2 = cool
     segment_start INTEGER NOT NULL,       -- Unix timestamp (ms)
     segment_end INTEGER NOT NULL,         -- Unix timestamp (ms)
     segment_runtime INTEGER NOT NULL,     -- Duration in ms
-    run_hour TEXT NOT NULL,               -- 'YYYY-MM-DD HH:00:00'
+    segment_hour TEXT NOT NULL,           -- 'YYYY-MM-DD HH:00:00'
     FOREIGN KEY (thermostat_id) REFERENCES thermostats(id),
     FOREIGN KEY (cycle_id) REFERENCES tstate_cycles(id)
 );
 
 -- View for hourly runtime aggregation
-CREATE VIEW IF NOT EXISTS view_cycle_hourly_runtime AS
+DROP VIEW IF EXISTS view_cycle_hourly_runtime;
+CREATE VIEW view_cycle_hourly_runtime AS
 SELECT
-    thermostat_id,
-    run_hour,
-    SUM(segment_runtime) / 60000.0 AS total_runtime_minutes
-FROM cycle_segments
-GROUP BY thermostat_id, run_hour
-ORDER BY run_hour;
+    cs.thermostat_id,
+    cs.segment_hour,
+    cs.segment_runtime / 60000.0 AS total_runtime_minutes,
+    cs.tmode,
+    AVG(sd.temp) AS avg_indoor_temp,
+    AVG(sd.outdoor_temp) AS avg_outdoor_temp,
+    AVG(sd.humidity) AS avg_indoor_humidity,
+    AVG(sd.outdoor_humidity) AS avg_outdoor_humidity
+FROM cycle_segments cs
+JOIN scan_data sd ON cs.thermostat_id = sd.thermostat_id
+    AND sd.timestamp >= cs.segment_start AND sd.timestamp <= cs.segment_end
+GROUP BY cs.thermostat_id, cs.segment_hour, cs.tmode
+ORDER BY cs.segment_hour;
 
 CREATE TABLE IF NOT EXISTS compressors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     thermostat_id INTEGER REFERENCES thermostats(id),
+    make TEXT,
     model TEXT,
     rla REAL,
     lra REAL,
@@ -391,7 +489,10 @@ CREATE TABLE IF NOT EXISTS compressors (
     pressure_high REAL,
     pressure_low REAL,
     ampacity_min REAL,
-    breaker_max REAL
+    breaker_max REAL,
+    capacity REAL,
+    btu_per_hr_low REAL,
+    btu_per_hr_high REAL
 );
 
 CREATE TABLE IF NOT EXISTS thermostat_compressor (
@@ -405,11 +506,12 @@ DROP VIEW IF EXISTS view_hvac_systems;
 CREATE VIEW view_hvac_systems AS
 SELECT 
   t.*,
-  c.model,
+  c.make AS compressor_make,
+  c.model AS compressor_model,
   c.rla,
   c.lra,
-  c.voltage,
-  c.phase,
+  c.voltage AS compressor_voltage,
+  c.phase AS compressor_phase,
   c.hertz,
   c.hp,
   c.refrigerant,
@@ -418,10 +520,21 @@ SELECT
   c.pressure_high,
   c.pressure_low,
   c.ampacity_min,
-  c.breaker_max
+  c.breaker_max,
+  c.capacity,
+  c.btu_per_hr_low,
+  c.btu_per_hr_high,
+  f.make AS fan_make,
+  f.model AS fan_model,
+  f.year AS fan_year,
+  f.voltage AS fan_voltage,
+  f.phase AS fan_phase,
+  f.rated_amps AS fan_rated_amps,
+  f.horsepower AS fan_horsepower,
+  f.efficiency AS fan_efficiency
 FROM thermostats t
-JOIN compressors c
-  ON c.thermostat_id = t.id
+JOIN compressors c ON c.thermostat_id = t.id
+LEFT JOIN fan_motors f ON f.thermostat_id = t.id;
 
 -- Shelly H/T Sensor Configuration
 CREATE TABLE IF NOT EXISTS shelly_sensors (
@@ -430,4 +543,17 @@ CREATE TABLE IF NOT EXISTS shelly_sensors (
     shelly_device_id TEXT NOT NULL,
     UNIQUE(thermostat_id),
     UNIQUE(shelly_device_id)
+);
+
+CREATE TABLE IF NOT EXISTS fan_motors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  thermostat_id INTEGER REFERENCES thermostats(id),
+  make TEXT,
+  model TEXT,
+  year INTEGER,
+  voltage TEXT,
+  phase INTEGER,
+  rated_amps REAL,
+  horsepower REAL,
+  efficiency REAL
 );

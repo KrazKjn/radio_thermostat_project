@@ -47,6 +47,8 @@ router.get('/thermostat/:ip/hourly-cycles', authWithRefresh, thermostatControlle
 // Sensor Settings
 router.get('/sensor/:ip', authWithRefresh, thermostatController.getSensorSettings);
 router.post('/sensor/:ip', authWithRefresh, thermostatController.updateSensorSettings);
+router.get('/shelly', authWithRefresh, thermostatController.getShellySettings);
+router.post('/shelly', authWithRefresh, thermostatController.postShellySettings);
 
 // Scanner
 router.post("/scanner/start/:ip", authWithRefresh, thermostatController.startScanner);

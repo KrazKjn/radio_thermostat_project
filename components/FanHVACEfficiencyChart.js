@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { VictoryChart, VictoryBar, VictoryAxis, VictoryTheme } from 'victory';
+import { VictoryGroup, VictoryChart, VictoryBar, VictoryAxis, VictoryTheme, VictoryTooltip } from 'victory';
 import { useThermostat } from "../context/ThermostatContext";
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
@@ -13,8 +13,8 @@ const Logger = require('./Logger');
 const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange }) => {
     const hostname = React.useContext(HostnameContext);
     const { getFanVsHvacDaily } = useThermostat();
-    const [chartData, setChartData] = useState([]);
-    const [dayLimit, setDayLimit] = useState(14);
+    const [chartData, setChartData] = useState({ hvacData: [], fanData: [] });
+    const [dayLimit, setDayLimit] = useState(7);
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
     const chartColors = getChartColors(isDarkMode);
     const chartWidth = windowWidth - 40;
@@ -25,19 +25,18 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
             try {
                 const json = await getFanVsHvacDaily(thermostatIp, hostname, dayLimit);
                 if (Array.isArray(json)) {
-                    const data = [];
+                    const hvacData = [];
+                    const fanData = [];
 
-                    json.forEach((d, index) => {
+                    json.forEach((d) => {
                         const label = new Date(d.run_date).toLocaleDateString();
-                        data.push(
-                            { x: label, y: d.hvac_runtime_hr, category: 'HVAC' },
-                            { x: label, y: d.fan_runtime_hr, category: 'Fan' }
-                        );
+                        hvacData.push({ x: label, y: d.hvac_runtime_hr });
+                        fanData.push({ x: label, y: d.fan_runtime_hr });
                     });
 
-                    setChartData(data);
+                    setChartData({ hvacData, fanData });
                     if (onDataChange) {
-                        onDataChange(data);
+                        onDataChange({ hvacData, fanData });
                     }
                 } else {
                     throw new Error(json.error || 'Failed to fetch fan vs hvac data');
@@ -64,46 +63,91 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
                     <Picker.Item key={val} label={`${val} days`} value={val} />
                 ))}
             </Picker>
-            {chartData.length > 0 ? (
+            {chartData.hvacData.length > 0 ? (
                 <VictoryChart
                     theme={VictoryTheme.material}
-                    domainPadding={{ x: 20 }}
+                    domainPadding={{ x: 30 }}
                     width={chartWidth}
                     height={chartHeight}
                 >
                     <VictoryAxis
                         style={{
-                            tickLabels: { fontSize: 12, style:{ fontFamily: 'Roboto', fontWeight: 'bold' }, angle: 30, padding: 5, fill: chartColors.colorBarFn(0.8) },
-                            axisLabel: { fontSize: 14, style:{ fontFamily: 'Roboto', fontWeight: 'bold' }, padding: 30 }
+                            tickLabels: {
+                                fontSize: 12,
+                                fontFamily: 'Roboto',
+                                fontWeight: 'bold',
+                                angle: 30,
+                                padding: 5,
+                                fill: chartColors.colorBarFn(0.8)
+                            },
+                            axisLabel: {
+                                fontSize: 14,
+                                fontFamily: 'Roboto',
+                                fontWeight: 'bold',
+                                padding: 30
+                            }
                         }}
                     />
                     <VictoryAxis
                         dependentAxis
                         label="Runtime (hrs)"
                         style={{
-                            tickLabels: { fontSize: 12, style:{ fontFamily: 'Roboto', fontWeight: 'bold' }, fill: chartColors.colorBarFn(0.8) },
-                            axisLabel: { fontSize: 14, style:{ fontFamily: 'Roboto', fontWeight: 'bold' }, padding: 40 }
-                        }}
-                    />
-                    <VictoryBar
-                        data={chartData}
-                        x="x"
-                        y="y"
-                        style={{
-                            data: {
-                                fill: ({ datum }) =>
-                                    datum.category === 'HVAC'
-                                        ? chartColors.colorBarHVACFn(0.6)
-                                        : chartColors.colorBarFanFn(0.3),
-                                stroke: chartColors.colorBarFn(0.9),
-                                strokeWidth: 1
+                            tickLabels: {
+                                fontSize: 12,
+                                fontFamily: 'Roboto',
+                                fontWeight: 'bold',
+                                fill: chartColors.colorBarFn(0.8)
+                            },
+                            axisLabel: {
+                                fontSize: 14,
+                                fontFamily: 'Roboto',
+                                fontWeight: 'bold',
+                                padding: 40
                             }
                         }}
-                        barWidth={8}
-                        barRatio={0.8}
-                        cornerRadius={2}
-                        labels={({ datum }) => `${datum.category}: ${datum.y.toFixed(1)}h`}
                     />
+                    <VictoryGroup offset={12} colorScale={['#4db6ac', '#ffb74d']}>
+                        <VictoryBar
+                            data={chartData.hvacData}
+                            labels={({ datum }) => `HVAC: ${datum.y.toFixed(1)}h`}
+                            style={{
+                                data: {
+                                fill: chartColors.colorBarHVACFn(0.6),
+                                stroke: chartColors.colorBarFn(0.9),
+                                strokeWidth: 1
+                                }
+                            }}
+                            labelComponent={
+                                <VictoryTooltip
+                                    flyoutStyle={{ fill: '#222', stroke: '#ccc', strokeWidth: 1 }}
+                                    style={{ fill: '#FFFF00', fontSize: 12, fontFamily: 'Roboto' }}
+                                    pointerLength={6}
+                                    cornerRadius={4}
+                                    flyoutPadding={{ top: 6, bottom: 6, left: 10, right: 10 }}
+                                />
+                            }
+                        />
+                        <VictoryBar
+                            data={chartData.fanData}
+                            labels={({ datum }) => `Fan: ${datum.y.toFixed(1)}h`}
+                            style={{
+                                data: {
+                                fill: chartColors.colorBarFanFn(0.3),
+                                stroke: chartColors.colorBarFn(0.9),
+                                strokeWidth: 1
+                                }
+                            }}
+                            labelComponent={
+                                <VictoryTooltip
+                                    flyoutStyle={{ fill: '#222', stroke: '#ccc', strokeWidth: 1 }}
+                                    style={{ fill: '#FFFF00', fontSize: 12, fontFamily: 'Roboto' }}
+                                    pointerLength={6}
+                                    cornerRadius={4}
+                                    flyoutPadding={{ top: 6, bottom: 6, left: 10, right: 10 }}
+                                />
+                            }
+                        />
+                    </VictoryGroup>
                 </VictoryChart>
             ) : (
                 <Text style={subHeaderStyle}>No fan vs. HVAC data available.</Text>

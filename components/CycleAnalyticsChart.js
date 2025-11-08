@@ -75,9 +75,6 @@ const calculateFanCost = (runtimeMin, hvac_system, costPerKwH = 0.126) => {
 const formatMetric = (value, unit) =>
   value != null ? `${value.toFixed(1)}${unit}` : '--';
 
-const formatMetric = (value, unit) =>
-  value != null ? `${value.toFixed(1)}${unit}` : '--';
-
 const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange, viewMode }) => {
   const hostname = React.useContext(HostnameContext);
   const { getThermostats, getDailyCycles, getHourlyCycles } = useThermostat();

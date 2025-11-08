@@ -5,10 +5,75 @@ import { Picker } from '@react-native-picker/picker';
 import { useThermostat } from '../context/ThermostatContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
+import { HVAC_MODE_COOL } from '../constants/hvac_mode';
 import commonStyles from '../styles/commonStyles';
 import withExport from './withExport';
 
 const Logger = require('./Logger');
+const costPerKwH = 0.126398563;
+const costPerGallon = 2.85;
+const hvacUsageDecimals = parseInt(process.env.HVAC_USAGE_DECIMALS) || 2;
+const hvacCostDecimals = parseInt(process.env.HVAC_COST_DECIMALS) || 2;
+const fanUsageDecimals = parseInt(process.env.FAN_USAGE_DECIMALS) || 3;
+const fanCostDecimals = parseInt(process.env.FAN_COST_DECIMALS) || 3;
+
+const parseVoltage = (voltageStr) => {
+    if (!voltageStr) return 230;
+    if (voltageStr.includes('/')) {
+        const parts = voltageStr.split('/').map(v => parseFloat(v));
+        return Math.max(...parts);
+    }
+    return parseFloat(voltageStr);
+};
+
+const calculateKwHDraw = (rla, voltage) =>
+    rla ? (rla * voltage) / 1000 : 3.5;
+
+const calculateKwHsUsed = (runtimeMin, hvac_system) => {
+  const voltage = parseVoltage(hvac_system?.voltage ?? hvac_system?.compressor_voltage);
+  const kwDraw = calculateKwHDraw(hvac_system?.rla, voltage);
+  return (runtimeMin / 60) * kwDraw;
+};
+
+const calculateCoolingCost = (runtimeMin, hvac_system, costPerKwH = 0.126) => {
+  const kwHsUsed = calculateKwHsUsed(runtimeMin, hvac_system);
+  return kwHsUsed * costPerKwH;
+};
+
+const calculateGallonsConsumed = (runtimeMin, hvac_system, efficiency = 0.90) => {
+  const heatingBTU =
+    hvac_system?.btu_per_hr_high ||
+    hvac_system?.btu_per_hr_low ||
+    (hvac_system?.tons * 20000);
+
+  const effectiveBTU = heatingBTU * efficiency;
+  const gallonsPerMinute = (effectiveBTU / 91452) / 60;
+
+  return runtimeMin * gallonsPerMinute;
+};
+
+const calculateHeatingCost = (runtimeMin, hvac_system, costPerGallon = 3.25, efficiency = 0.90) => {
+  const gallonsUsed = calculateGallonsConsumed(runtimeMin, hvac_system, efficiency);
+  return gallonsUsed * costPerGallon;
+};
+
+const calculateFanKwHDraw = (amps, voltage) =>
+  amps && voltage ? (amps * voltage) / 1000 : 0.5;
+
+const calculateFanKwHsUsed = (runtimeMin, hvac_system) => {
+  const voltage = parseVoltage(hvac_system?.fan_voltage);
+  const amps = hvac_system?.fan_rated_amps;
+  const kwDraw = calculateFanKwHDraw(amps, voltage);
+  return (runtimeMin / 60) * kwDraw;
+};
+
+const calculateFanCost = (runtimeMin, hvac_system, costPerKwH = 0.126) => {
+  const kwHsUsed = calculateFanKwHsUsed(runtimeMin, hvac_system);
+  return kwHsUsed * costPerKwH;
+};
+
+const formatMetric = (value, unit) =>
+  value != null ? `${value.toFixed(1)}${unit}` : '--';
 
 const formatMetric = (value, unit) =>
   value != null ? `${value.toFixed(1)}${unit}` : '--';
@@ -26,17 +91,18 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
   const chartWidth = windowWidth - 40;
   const chartHeight = windowHeight / 2;
   const subHeaderStyle = parentComponent == null ? styles.subHeader : commonStyles.digitalLabel;
-  const costPerKwH = 0.126398563
-  
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const daily = await getDailyCycles(thermostatIp, hostname, dayLimit);
-        const hourly = await getHourlyCycles(thermostatIp, hostname, hourLimit);
         const definedThermostats = await getThermostats(hostname);
+        setThermostats(definedThermostats || []);
+        const [daily, hourly] = await Promise.all([
+            getDailyCycles(thermostatIp, hostname, dayLimit),
+            getHourlyCycles(thermostatIp, hostname, hourLimit)
+        ]);
         setDailyData(daily);
         setHourlyData(hourly);
-        setThermostats(definedThermostats || []);
         if (onDataChange) {
             if (viewMode === 'daily') {
                 onDataChange(daily);
@@ -52,54 +118,82 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
   }, [thermostatIp, hostname, dayLimit, hourLimit, viewMode]);
 
   const formatDailyData = dailyData.map(d => {
-    const thermostat = thermostats.find(t => t.ip === thermostatIp);
-    //  (RLA × Voltage) / 1000
-    let voltage = 230; // default fallback
-    if (thermostat?.voltage && thermostat.voltage.includes('/')) {
-        const parts = thermostat.voltage.split('/').map(v => parseFloat(v));
-        voltage = Math.max(...parts);
-    } else if (thermostat?.voltage) {
-        voltage = parseFloat(thermostat.voltage);
-    }
-    const KwHDraw = thermostat?.rla ? (thermostat.rla * voltage / 1000) : 3.5; // Example values
-    const costPerDay = ((d.total_runtime_minutes / 60) * costPerKwH * KwHDraw) || 0; // Example cost model
+    const hvac_system = thermostats.find(t => t.ip === thermostatIp);
+    const isCooling = d.HVAC.tmode === HVAC_MODE_COOL;
+    const modeLabel = isCooling ? 'Cooling' : 'Heating';
+    const fillColor = isCooling ? 'blue' : 'red';
+
+    const costPerDay = isCooling
+    ? calculateCoolingCost(d.HVAC.total_runtime_minutes, hvac_system, costPerKwH)
+    : calculateHeatingCost(d.HVAC.total_runtime_minutes, hvac_system, costPerGallon);
+
+    const consumption = isCooling
+    ? `${calculateKwHsUsed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} kWh`
+    : `${calculateGallonsConsumed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} Gallons`;
+
+    const fan_costPerDay = calculateFanCost(d.FAN.total_runtime_minutes, hvac_system, costPerKwH);
+
+    const fan_consumption = `${calculateFanKwHsUsed(d.FAN.total_runtime_minutes, hvac_system).toFixed(fanUsageDecimals)} kWh`;
+
     return {
-        x: new Date(`${d.run_date} 12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: '2-digit', day: '2-digit' }),
-        y: d.cycle_count,
-        label: `${d.cycle_count} cycles
-            ${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes
-            $${costPerDay.toFixed(2)} / day
-            Temps: In ${formatMetric(d.avg_indoor_temp, ' F')}, Out ${formatMetric(d.avg_outdoor_temp, ' F')}
-            Humidity: In ${formatMetric(d.avg_indoor_humidity, '%')}, Out ${formatMetric(d.avg_outdoor_humidity, '%')}`
+        x: new Date(`${d.run_date} 12:00:00`).toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: '2-digit',
+          day: '2-digit'
+        }),
+        y: d.HVAC.cycle_count,
+        mode: modeLabel,
+        fill: fillColor,
+        label: `${d.HVAC.cycle_count} cycles
+            ${parseFloat(d.HVAC.total_runtime_minutes).toFixed(1)} minutes
+            $${(costPerDay + fan_costPerDay).toFixed(hvacCostDecimals)} / day
+            $${costPerDay.toFixed(hvacCostDecimals)} / (${consumption})
+            $${fan_costPerDay.toFixed(fanCostDecimals)} Fan / (${fan_consumption})
+            Temps: In ${formatMetric(d.HVAC.avg_indoor_temp, ' F')}, Out ${formatMetric(d.HVAC.avg_outdoor_temp, ' F')}
+            Humidity: In ${formatMetric(d.HVAC.avg_indoor_humidity, '%')}, Out ${formatMetric(d.HVAC.avg_outdoor_humidity, '%')}`
     };
   });
 
   const formatHourlyData = hourlyData.map(d => {
     const dateStr = new Date(`${d.run_date} 12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: '2-digit', day: '2-digit' });
-    const hour = parseInt(d.hour, 10);
+    const hour = parseInt(d.HVAC.hour, 10);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const hour12 = hour % 12 || 12;
     const label = `${dateStr} ${hour12} ${ampm}`;
-    const thermostat = thermostats.find(t => t.ip === thermostatIp);
-    //  (RLA × Voltage) / 1000
-    let voltage = 230; // default fallback
-    if (thermostat?.voltage && thermostat.voltage.includes('/')) {
-        const parts = thermostat.voltage.split('/').map(v => parseFloat(v));
-        voltage = Math.max(...parts);
-    } else if (thermostat?.voltage) {
-        voltage = parseFloat(thermostat.voltage);
-    }
-    const KwHDraw = thermostat?.rla ? (thermostat.rla * voltage / 1000) : 3.5; // Example values
-    const costPerCycle = ((d.total_runtime_minutes / 60) * costPerKwH * KwHDraw) / d.cycle_count || 0; // Example cost model
-    const wearIndex = d.cycle_count >= 6 ? '⚠️' : '';
+    const hvac_system = thermostats.find(t => t.ip === thermostatIp);
+    const isCooling = d.HVAC.tmode === HVAC_MODE_COOL;
+    const modeLabel = isCooling ? 'Cooling' : 'Heating';
+    const fillColor = isCooling ? 'blue' : 'red';
+
+    const runtime_hr = d.HVAC.total_runtime_minutes / 60;
+    const costPerCycle = isCooling
+      ? calculateCoolingCost(d.HVAC.total_runtime_minutes, hvac_system, costPerKwH) / d.HVAC.cycle_count 
+      : calculateHeatingCost(d.HVAC.total_runtime_minutes, hvac_system, costPerGallon) / d.HVAC.cycle_count ;
+
+    const consumption = isCooling
+      ? `${calculateKwHsUsed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} kWh`
+      : `${calculateGallonsConsumed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} Gallons`;
+
+    // Merge fan data if present
+    const fan_runtime_hr = d.FAN.total_runtime_minutes / 60;
+    const fan_costPerCycle = calculateFanCost(d.FAN.total_runtime_minutes, hvac_system, costPerKwH) / d.FAN.cycle_count;
+    const fan_consumption = `${calculateFanKwHsUsed(d.FAN.total_runtime_minutes, hvac_system).toFixed(fanUsageDecimals)} kWh`;
+
+    const wearIndex = d.HVAC.cycle_count >= 6 ? '⚠️' : '';
+
     return {
         x: label,
-        y: d.cycle_count,
-        label: `${d.cycle_count} cycles
-            ${parseFloat(d.total_runtime_minutes).toFixed(1)} minutes
-            $${costPerCycle.toFixed(2)} / cycle ${wearIndex}
-            Temps: In ${formatMetric(d.avg_indoor_temp, ' F')}, Out ${formatMetric(d.avg_outdoor_temp, ' F')}
-            Humidity: In ${formatMetric(d.avg_indoor_humidity, '%')}, Out ${formatMetric(d.avg_outdoor_humidity, '%')}`
+        y: d.HVAC.cycle_count,
+        mode: modeLabel,
+        fill: fillColor,
+        label: `${d.HVAC.cycle_count} cycles
+            ${parseFloat(d.HVAC.total_runtime_minutes).toFixed(1)} minutes
+            ${runtime_hr.toFixed(2)} hours
+            $${(costPerCycle + fan_costPerCycle).toFixed(hvacCostDecimals)} Total Cost
+            $${costPerCycle.toFixed(hvacCostDecimals)} / ${consumption} / cycle ${wearIndex}
+            $${fan_costPerCycle.toFixed(fanCostDecimals)} Fan / ${fan_consumption}
+            Temps: In ${formatMetric(d.HVAC.avg_indoor_temp, ' F')}, Out ${formatMetric(d.HVAC.avg_outdoor_temp, ' F')}
+            Humidity: In ${formatMetric(d.HVAC.avg_indoor_humidity, '%')}, Out ${formatMetric(d.HVAC.avg_outdoor_humidity, '%')}`
     };
   });
 

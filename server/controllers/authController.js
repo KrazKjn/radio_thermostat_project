@@ -102,44 +102,44 @@ const logout = (req, res) => {
 };
 
 const tokenInfo = (req, res) => {
-    Logger.debug(`Entering ...`, 'AuthController', 'tokenInfo', 2);
-    //const token = authHeader.split(" ")[1];
     const token = req.query?.token;
+    const debugLevel = Number.isFinite(Number(req.query?.debugLevel)) ? Number(req.query.debugLevel) : 6;
+    Logger.debug(`Entering ...`, 'AuthController', 'tokenInfo', debugLevel);
     if (!token) {
       return res.status(400).json({ error: "No token provided" });
     }
-    Logger.debug(`Decoding ${token} ...`, 'AuthController', 'tokenInfo', 2);
+    Logger.debug(`Decoding ${token} ...`, 'AuthController', 'tokenInfo', debugLevel);
     let decoded = jwt.decode(token);
-    Logger.debug(`Decoding ${token} ... done`, 'AuthController', 'tokenInfo', 2);
+    Logger.debug(`Decoding ${token} ... done`, 'AuthController', 'tokenInfo', debugLevel);
     if (decoded) {
       const now = Date.now(); // current time in milliseconds
       const twoHoursFromNow = now + (2 * 60 * 60 * 1000); // add 2 hours
 
-      Logger.debug(`Checking for User or Service token ...`, 'AuthController', 'tokenInfo', 2);
+      Logger.debug(`Checking for User or Service token ...`, 'AuthController', 'tokenInfo', debugLevel);
       if (new Date(decoded.exp * 1000) < twoHoursFromNow) {
         // User Token detected, check for oldToken to refresh in DB
         const newToken = req.query?.newToken;
         if (newToken !== undefined && newToken !== null) {
-          Logger.debug(`New User Token Provided: newToken = ${newToken}, token = ${token}`, 'AuthController', 'tokenInfo', 2);
+          Logger.debug(`New User Token Provided: newToken = ${newToken}, token = ${token}`, 'AuthController', 'tokenInfo', debugLevel);
           if (newToken !== token) {
             const now = Math.floor(Date.now() / 1000);
             // Invalidate the old token in the database
-            Logger.debug(`Updating DB:user_sessions ...`, 'AuthController', 'tokenInfo', 2);
+            Logger.debug(`Updating DB:user_sessions ...`, 'AuthController', 'tokenInfo', debugLevel);
             decoded = jwt.decode(newToken);
             db.prepare(`
                 UPDATE user_sessions
                 SET sessionToken = ?, createdAt = ?, expiresAt = ?
                 WHERE sessionToken = ?
               `).run(newToken, now, decoded.exp, token);
-            Logger.debug(`Updating DB:user_sessions ... done`, 'AuthController', 'tokenInfo', 2);
+            Logger.debug(`Updating DB:user_sessions ... done`, 'AuthController', 'tokenInfo', debugLevel);
           } else {
-            Logger.debug(`oldToken and new token are the same.`, 'AuthController', 'tokenInfo', 2);
+            Logger.debug(`oldToken and new token are the same.`, 'AuthController', 'tokenInfo', debugLevel);
           }
         } else{
-          Logger.debug(`New User Token NOT Provided.`, 'AuthController', 'tokenInfo', 2);
+          Logger.debug(`New User Token NOT Provided.`, 'AuthController', 'tokenInfo', debugLevel);
         }
       } else {
-        Logger.debug(`Service token ...`, 'AuthController', 'tokenInfo', 2);
+        Logger.debug(`Service token ...`, 'AuthController', 'tokenInfo', debugLevel);
       }
       res.status(200).json({
         username: decoded.username,
@@ -150,7 +150,7 @@ const tokenInfo = (req, res) => {
     } else {
       res.status(401).json({ error: "Invalid token" });
     }
-    Logger.debug(`Exiting ...`, 'AuthController', 'tokenInfo', 2);
+    Logger.debug(`Exiting ...`, 'AuthController', 'tokenInfo', debugLevel);
 };
 
 module.exports = {

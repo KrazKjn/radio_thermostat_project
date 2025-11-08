@@ -5,10 +5,17 @@ import { Picker } from '@react-native-picker/picker';
 import { useThermostat } from '../context/ThermostatContext';
 import { HostnameContext } from '../context/HostnameContext';
 import { getChartColors } from './chartTheme';
+import { HVAC_MODE_HEAT, HVAC_MODE_COOL } from '../constants/hvac_mode';
 import commonStyles from '../styles/commonStyles';
 import withExport from './withExport';
 
 const Logger = require('./Logger');
+const costPerKwH = 0.126398563
+const costPerGallon = 2.85;
+const hvacUsageDecimals = parseInt(process.env.HVAC_USAGE_DECIMALS) || 2;
+const hvacCostDecimals = parseInt(process.env.HVAC_COST_DECIMALS) || 2;
+const fanUsageDecimals = parseInt(process.env.FAN_USAGE_DECIMALS) || 3;
+const fanCostDecimals = parseInt(process.env.FAN_COST_DECIMALS) || 3;
 
 const parseVoltage = (voltageStr) => {
     if (!voltageStr) return 230;
@@ -22,55 +29,166 @@ const parseVoltage = (voltageStr) => {
 const calculateKwHDraw = (rla, voltage) =>
     rla ? (rla * voltage) / 1000 : 3.5;
 
+const calculateKwHsUsed = (runtimeMin, hvac_system) => {
+  const voltage = parseVoltage(hvac_system?.voltage ?? hvac_system?.compressor_voltage);
+  const kwDraw = calculateKwHDraw(hvac_system?.rla, voltage);
+  return (runtimeMin / 60) * kwDraw;
+};
+
+const calculateCoolingCost = (runtimeMin, hvac_system, costPerKwH = 0.126) => {
+  const kwHsUsed = calculateKwHsUsed(runtimeMin, hvac_system);
+  return kwHsUsed * costPerKwH;
+};
+
+const calculateGallonsConsumed = (runtimeMin, hvac_system, efficiency = 0.90) => {
+  const heatingBTU =
+    hvac_system?.btu_per_hr_high ||
+    hvac_system?.btu_per_hr_low ||
+    (hvac_system?.tons * 20000);
+
+  const effectiveBTU = heatingBTU * efficiency;
+  const gallonsPerMinute = (effectiveBTU / 91452) / 60;
+
+  return runtimeMin * gallonsPerMinute;
+};
+
+const calculateHeatingCost = (runtimeMin, hvac_system, costPerGallon = 3.25, efficiency = 0.90) => {
+  const gallonsUsed = calculateGallonsConsumed(runtimeMin, hvac_system, efficiency);
+  return gallonsUsed * costPerGallon;
+};
+
+const calculateFanKwHDraw = (amps, voltage) =>
+  amps && voltage ? (amps * voltage) / 1000 : 0.5;
+
+const calculateFanKwHsUsed = (runtimeMin, hvac_system) => {
+  const voltage = parseVoltage(hvac_system?.fan_voltage);
+  const amps = hvac_system?.fan_rated_amps;
+  const kwDraw = calculateFanKwHDraw(amps, voltage);
+  return (runtimeMin / 60) * kwDraw;
+};
+
+const calculateFanCost = (runtimeMin, hvac_system, costPerKwH = 0.126) => {
+  const kwHsUsed = calculateFanKwHsUsed(runtimeMin, hvac_system);
+  return kwHsUsed * costPerKwH;
+};
+
 const formatMetric = (value, unit) =>
   value != null ? `${value.toFixed(1)}${unit}` : '--';
 
-const mapDailyData = (dailyJson, costPerKwH, KwHDraw) =>
-    dailyJson.map(d => {
-    const cost = ((d.total_runtime_hr / 60) * costPerKwH * KwHDraw) || 0;
-    return {
+const mapDailyData = (dailyJson, hvac_system) => {
+  return dailyJson
+    .filter(d => (d.HVAC?.tmode === HVAC_MODE_HEAT || d.HVAC?.tmode === HVAC_MODE_COOL) && d.HVAC.total_runtime_minutes <= 1440)
+    .map(d => {
+      const hvac = d.HVAC;
+      const fan = d.FAN;
+
+      const isCooling = hvac.tmode === HVAC_MODE_COOL;
+      const modeLabel = isCooling ? 'Cooling' : 'Heating';
+      const fillColor = isCooling ? 'blue' : 'red';
+
+      const cost = isCooling
+        ? calculateCoolingCost(hvac.total_runtime_minutes, hvac_system, costPerKwH)
+        : calculateHeatingCost(hvac.total_runtime_minutes, hvac_system, costPerGallon);
+
+      const consumption = isCooling
+        ? `${calculateKwHsUsed(hvac.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} kWh`
+        : `${calculateGallonsConsumed(hvac.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} Gallons`;
+
+      const fan_cost = fan
+        ? calculateFanCost(fan.total_runtime_minutes, hvac_system, costPerKwH)
+        : 0;
+
+      const fan_consumption = fan
+        ? `${calculateFanKwHsUsed(fan.total_runtime_minutes, hvac_system).toFixed(fanUsageDecimals)} kWh`
+        : '0 kWh';
+
+      return {
         x: new Date(`${d.run_date} 12:00:00`).toLocaleDateString('en-US', {
-            weekday: 'short',
-            month: '2-digit',
-            day: '2-digit'
+          weekday: 'short',
+          month: '2-digit',
+          day: '2-digit'
         }),
-        y: d.total_runtime_hr,
-        label: `${d.total_runtime_hr.toFixed(1)} minutes
-            ${(d.total_runtime_hr / 60).toFixed(1)} hours
-            $${cost.toFixed(2)}
-            Temps: In ${formatMetric(d.avg_indoor_temp, ' F')}, Out ${formatMetric(d.avg_outdoor_temp, ' F')}
-            Humidity: In ${formatMetric(d.avg_indoor_humidity, '%')}, Out ${formatMetric(d.avg_outdoor_humidity, '%')}`
-    };
+        y: hvac.total_runtime_minutes,
+        mode: modeLabel,
+        fill: fillColor,
+        label: `${modeLabel}
+          ${hvac.total_runtime_minutes.toFixed(1)} minutes
+          ${(hvac.total_runtime_minutes / 60).toFixed(1)} hours
+          $${(cost + fan_cost).toFixed(hvacCostDecimals)} Total Cost
+          $${cost.toFixed(hvacCostDecimals)} / (${consumption})
+          $${fan_cost.toFixed(fanCostDecimals)} Fan / (${fan_consumption})
+          Temps: In ${formatMetric(hvac.avg_indoor_temp, ' F')}, Out ${formatMetric(hvac.avg_outdoor_temp, ' F')}
+          Humidity: In ${formatMetric(hvac.avg_indoor_humidity, '%')}, Out ${formatMetric(hvac.avg_outdoor_humidity, '%')}`
+      };
+    });
+};
+
+const mapHourlyData = (hourlyJson, hvac_system) => {
+  const grouped = {};
+
+  // First pass: group by segment_hour and tmode
+  hourlyJson.forEach(d => {
+    if (d.HVAC && d.HVAC.tmode !== null && d.HVAC.tmode !== undefined) {
+      const key = `${d.segment_hour}_${d.HVAC.tmode}`;
+      grouped[key] = d;
+    }
   });
 
-const mapHourlyData = (hourlyJson, costPerKwH, KwHDraw) =>
-    hourlyJson.map(d => {
-    const iso = d.segment_hour.replace(' ', 'T') + 'Z';
-    const dt = new Date(iso);
-    const mm = String(dt.getMonth() + 1).padStart(2, '0');
-    const dd = String(dt.getDate()).padStart(2, '0');
-    let hh = dt.getHours();
-    const period = hh >= 12 ? 'PM' : 'AM';
-    hh = hh % 12 || 12;
-    const hhStr = String(hh).padStart(2, '0');
-    const cost = ((d.total_runtime_minutes / 60) * costPerKwH * KwHDraw) || 0;
+  // Second pass: merge fan data into heating/cooling
+  return Object.values(grouped)
+    .filter(d => (d.HVAC.tmode === HVAC_MODE_HEAT|| d.HVAC.tmode === HVAC_MODE_COOL) && d.HVAC.total_runtime_minutes <= 60 )
+    .map(d => {
+      const iso = d.segment_hour.replace(' ', 'T') + 'Z';
+      const dt = new Date(iso);
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      let hh = dt.getHours();
+      const period = hh >= 12 ? 'PM' : 'AM';
+      hh = hh % 12 || 12;
+      const hhStr = String(hh).padStart(2, '0');
 
-    return {
+      const isCooling = d.HVAC.tmode === HVAC_MODE_COOL;
+      const modeLabel = isCooling ? 'Cooling' : 'Heating';
+      const fillColor = isCooling ? 'blue' : 'red';
+
+      //const  = d.HVAC.total_runtime_minutes; // / 60;
+      const cost = isCooling
+        ? calculateCoolingCost(d.HVAC.total_runtime_minutes, hvac_system, costPerKwH)
+        : calculateHeatingCost(d.HVAC.total_runtime_minutes, hvac_system, costPerGallon);
+
+      const consumption = isCooling
+        ? `${calculateKwHsUsed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} kWh`
+        : `${calculateGallonsConsumed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} Gallons`;
+
+      // Merge fan data if present
+      const fan_runtime_minutes = d.FAN ? d.FAN.total_runtime_minutes : 0;
+      const fan_cost = d.FAN ? calculateFanCost(fan_runtime_minutes, hvac_system, costPerKwH) : 0;
+      const fan_consumption = d.FAN
+        ? `${calculateFanKwHsUsed(fan_runtime_minutes, hvac_system).toFixed(fanUsageDecimals)} kWh`
+        : '0 kWh';
+
+      return {
         x: `${mm}/${dd} ${hhStr} ${period}`,
-        y: d.total_runtime_minutes / 60.0,
-        label: `${d.total_runtime_minutes.toFixed(1)} minutes
-            ${(d.total_runtime_minutes / 60).toFixed(2)} hours
-            $${cost.toFixed(2)}
-            Temps: Indoor ${formatMetric(d.avg_indoor_temp, ' F')}, Outdoor ${formatMetric(d.avg_outdoor_temp, ' F')}
-            Humidity: Indoor ${formatMetric(d.avg_indoor_humidity, '%')}, Outdoor ${formatMetric(d.avg_outdoor_humidity, '%')}`
-    };
-});
+        y: d.HVAC.total_runtime_minutes,
+        mode: modeLabel,
+        fill: fillColor,
+        label: `${modeLabel}
+          ${d.HVAC.total_runtime_minutes.toFixed(1)} minutes
+          ${(d.HVAC.total_runtime_minutes / 60).toFixed(2)} hours
+          $${(cost + fan_cost).toFixed(hvacCostDecimals)} Total Cost
+          $${cost.toFixed(hvacCostDecimals)} / ${consumption}
+          $${fan_cost.toFixed(fanCostDecimals)} Fan / ${fan_consumption}
+          Temps: In ${formatMetric(d.HVAC.avg_indoor_temp, ' F')}, Out ${formatMetric(d.HVAC.avg_outdoor_temp, ' F')}
+          Humidity: In ${formatMetric(d.HVAC.avg_indoor_humidity, '%')}, Out ${formatMetric(d.HVAC.avg_outdoor_humidity, '%')}`
+      };
+    });
+};
 
 const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange }) => {
     const hostname = React.useContext(HostnameContext);
     const { getThermostats, getDailyRuntime, getHourlyRuntime } = useThermostat();
-    const [dailyData, setDailyData] = useState([]);
-    const [hourlyData, setHourlyData] = useState([]);
+    const [dailyData, setDailyData] = useState(null);
+    const [hourlyData, setHourlyData] = useState(null);
     const [viewMode, setViewMode] = useState('daily');
     const [dayLimit, setDayLimit] = useState(7);
     const [hourLimit, setHourLimit] = useState(24);
@@ -79,7 +197,6 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
     const chartColors = getChartColors(isDarkMode);
     const chartWidth = windowWidth - 40;
     const chartHeight = windowHeight / 2;
-    const costPerKwH = 0.126398563
 
     useEffect(() => {
         const fetchData = async () => {
@@ -88,8 +205,6 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
                 setThermostats(definedThermostats || []);
 
                 const thermostat = definedThermostats?.find(t => t.ip === thermostatIp);
-                const voltage = parseVoltage(thermostat?.voltage);
-                const KwHDraw = calculateKwHDraw(thermostat?.rla, voltage);
 
                 const [dailyJson, hourlyJson] = await Promise.all([
                     getDailyRuntime(thermostatIp, hostname, dayLimit),
@@ -97,7 +212,7 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
                 ]);
 
                 if (Array.isArray(dailyJson)) {
-                    const mappedDailyData = mapDailyData(dailyJson, costPerKwH, KwHDraw);
+                    const mappedDailyData = mapDailyData(dailyJson, thermostat);
                     setDailyData(mappedDailyData);
                     if (viewMode === 'daily' && onDataChange) {
                         onDataChange(mappedDailyData);
@@ -107,7 +222,7 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
                 }
 
                 if (Array.isArray(hourlyJson)) {
-                    const mappedHourlyData = mapHourlyData(hourlyJson, costPerKwH, KwHDraw);
+                    const mappedHourlyData = mapHourlyData(hourlyJson, thermostat);
                     setHourlyData(mappedHourlyData);
                     if (viewMode === 'hourly' && onDataChange) {
                         onDataChange(mappedHourlyData);
@@ -121,7 +236,7 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
         };
 
         fetchData();
-    }, [thermostatIp, hostname, dayLimit, hourLimit, costPerKwH, viewMode]);
+    }, [thermostatIp, hostname, dayLimit, hourLimit, viewMode]);
     
     const subHeaderStyle = parentComponent == null ? styles.subHeader : commonStyles.digitalLabel;
 
@@ -153,7 +268,8 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
                     data={data}
                     style={{
                         data: {
-                            fill: chartColors.colorBarFn(0.6),
+                            // fill: chartColors.colorBarFn(0.6),
+                             fill: ({ datum }) => datum.fill,
                             stroke: chartColors.colorBarFn(0.9),
                             strokeWidth: 1
                         }
@@ -182,13 +298,17 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
                     <Picker
                         selectedValue={dayLimit}
                         style={styles.picker}
-                        onValueChange={(value) => setDayLimit(value)}
+                        onValueChange={(value) => setDayLimit(Number(value))}
                     >
                         {[7, 14, 21, 30].map((val) => (
                             <Picker.Item key={val} label={`${val} days`} value={val} />
                         ))}
                     </Picker>
-                    {dailyData.length > 0 ? renderChart(dailyData, 'Daily Runtime (minutes)', 'Day') : <Text style={subHeaderStyle}>Loading daily data...</Text>}
+                    {dailyData ? 
+                      (dailyData.length > 0 ? renderChart(dailyData, 'Daily Runtime (minutes)', 'Day') : 
+                      <Text style={subHeaderStyle}>No daily data.</Text>) :
+                      <Text style={subHeaderStyle}>Loading daily data...</Text>
+                    }
                 </>
             )}
 
@@ -197,13 +317,17 @@ const RuntimeTrendChart = ({ thermostatIp, isDarkMode, parentComponent = null, o
                     <Picker
                         selectedValue={hourLimit}
                         style={styles.picker}
-                        onValueChange={(value) => setHourLimit(value)}
+                        onValueChange={(value) => setHourLimit(Number(value))}
                     >
                         {[24, 48, 72, 96].map((val) => (
                             <Picker.Item key={val} label={`${val} hours`} value={val} />
                         ))}
                     </Picker>
-                    {hourlyData.length > 0 ? renderChart(hourlyData, 'Hourly Runtime (hours)', 'Day and Hour') : <Text style={subHeaderStyle}>Loading hourly data...</Text>}
+                    {hourlyData ? 
+                      (hourlyData.length > 0 ? renderChart(hourlyData, 'Hourly Runtime (hours)', 'Day and Hour') : 
+                      <Text style={subHeaderStyle}>No hourly data.</Text>) :
+                      <Text style={subHeaderStyle}>Loading hourly data...</Text>
+                    }
                 </>
             )}
         </View>

@@ -30,11 +30,11 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
 
                     json.forEach((d) => {
                         const label = new Date(d.run_date).toLocaleDateString();
-                        hvacData.push({ x: label, y: d.hvac_runtime_hr });
-                        fanData.push({ x: label, y: d.fan_runtime_hr });
+                        hvacData.push({ x: label, y: d.hvac_runtime_minutes / 60 });
+                        fanData.push({ x: label, y: d.fan_runtime_minutes / 60 });
                     });
 
-                    setChartData({ hvacData, fanData });                    
+                    setChartData({ hvacData, fanData });
                     if (onDataChange) {
                         onDataChange({ hvacData, fanData });
                     }
@@ -109,7 +109,7 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
                     <VictoryGroup offset={12} colorScale={['#4db6ac', '#ffb74d']}>
                         <VictoryBar
                             data={chartData.hvacData}
-                            labels={({ datum }) => `HVAC: ${datum.y.toFixed(1)}h`}
+                            labels={({ datum }) => `HVAC: ${datum.y.toFixed(2)}h`}
                             style={{
                                 data: {
                                 fill: chartColors.colorBarHVACFn(0.6),

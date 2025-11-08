@@ -6,6 +6,9 @@ import { HVAC_MODE_OFF, HVAC_MODE_HEAT, HVAC_MODE_COOL, HVAC_MODE_AUTO } from '.
 const Logger = require('../components/Logger');
 const ThermostatContext = createContext();
 const CACHE_EXPIRATION = 120; // 120 seconds
+const WEATHER_LATITUDE = Number(process.env.WEATHER_LATITUDE) || 29.8238;
+const WEATHER_LONGITUDE = Number(process.env.WEATHER_LONGITUDE) || -90.4751;
+
 
 export const ThermostatProvider = ({ children }) => {
   const { token, authenticatedApiFetch } = useAuth(); // <-- Now available everywhere in this provider
@@ -214,6 +217,7 @@ export const ThermostatProvider = ({ children }) => {
             Logger.debug(`ThermostatContext: Fetched thermostat data: ${JSON.stringify(data, null, 2)}`, 'ThermostatContext', 'fetchThermostatData');
             let modelInfo = null;
             let weatherData2 = null;
+            //let humidityData = null;
             try {
                 // Fetch additional data (model info and name)
                 modelInfo = await fetchModelInfo(thermostatIp, hostname);
@@ -223,16 +227,23 @@ export const ThermostatProvider = ({ children }) => {
                 // modelInfo stays null
             }
             try {
-                weatherData2 = await fetchWeather(29.8238, -90.4751);
+                weatherData2 = await fetchWeather(WEATHER_LATITUDE, WEATHER_LONGITUDE);
             } catch (error) {
                 console.error("Error fetching weather data:", error);
                 Logger.error(`Error fetching weather data: ${error.message}`, 'ThermostatContext', 'fetchThermostatData');
             }
+            // try {
+            //     humidityData = await fetchHumidityData();
+            // } catch (error) {
+            //     console.error("Error fetching humidity data:", error);
+            //     Logger.error(`Error fetching humidity data: ${error.message}`, 'ThermostatContext', 'fetchThermostatData');
+            // }
 
             // Update the context with the fetched data
             // Build the update object
             const updateObj = {
                 currentTemp: data.temp,
+                humidity: data.humidity,
                 targetTemp: data.tmode === HVAC_MODE_COOL ? data.t_cool : data.t_heat || null,
                 currentTempMode: data.tmode,
                 currentFanMode: data.fmode,

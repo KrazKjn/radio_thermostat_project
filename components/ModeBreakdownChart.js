@@ -26,8 +26,8 @@ const ModeBreakdownChart = ({ thermostatIp, isDarkMode, parentComponent = null, 
             try {
                 const json = await getDailyModeRuntime(thermostatIp, hostname, dayLimit);
                 if (json) {
-                    const heatRuntime = Math.round(json.filter(d => d.tmode === HVAC_MODE_HEAT).reduce((acc, cur) => acc + cur.total_runtime_hr, 0) * 100) / 100;
-                    const coolRuntime = Math.round(json.filter(d => d.tmode === HVAC_MODE_COOL).reduce((acc, cur) => acc + cur.total_runtime_hr, 0) * 100) / 100;
+                    const heatRuntime = Math.round(json.filter(d => d.HVAC.tmode === HVAC_MODE_HEAT).reduce((acc, cur) => acc + cur.HVAC.total_runtime_minutes, 0) * 100) / 100;
+                    const coolRuntime = Math.round(json.filter(d => d.HVAC.tmode === HVAC_MODE_COOL).reduce((acc, cur) => acc + cur.HVAC.total_runtime_minutes, 0) * 100) / 100;
 
                     const data = [
                         { name: `minutes Heating (${formatValue(heatRuntime / 60)} Hours)`, population: heatRuntime, color: 'rgba(255, 0, 0, 0.5)', legendFontFamily: 'Roboto', legendFontSize: 14, legendFontColor: '#7F7F7F', legendFontSize: 15 },

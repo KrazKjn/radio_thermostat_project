@@ -1496,11 +1496,27 @@ const captureStatIn = async (req, res) => {
     }
 };
 
+const getEnergyCost = (heat_source_id, date) => {
+    const row = db.prepare(`
+        SELECT cost_per_unit FROM energy_costing
+        WHERE energy_type_id = ? AND effective_start_date <= ?
+        ORDER BY effective_start_date DESC
+        LIMIT 1
+    `).get(heat_source_id, date);
+    return row ? row.cost_per_unit : null;
+};
+
 const getDailyRuntime = (req, res) => {
   try {
     const { ip } = req.params;
     const { days } = req.query;
-    const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+    const thermostat = db.prepare(`
+        SELECT t.id, c.heat_source_id
+        FROM thermostats t
+        JOIN thermostat_compressor tc ON t.id = tc.thermostat_id
+        JOIN compressors c ON tc.compressor_id = c.id
+        WHERE t.ip = ?
+    `).get(ip);
 
     if (!thermostat) {
       return res.status(404).json({ error: "Thermostat not found" });
@@ -1547,14 +1563,18 @@ const getDailyRuntime = (req, res) => {
 
     const rows = db.prepare(query).all(thermostat.id, thermostat.id);
 
-    //res.json(rows.reverse());
-    // --- Transform rows into { run_date, HVAC, FAN } format ---
     const grouped = new Map();
 
     for (const row of rows) {
         const { run_date, tmode, ...rest } = row;
         if (!grouped.has(run_date)) {
-            grouped.set(run_date, { run_date });
+            let cost = null;
+            if (tmode === 2) { // Cooling
+                cost = getEnergyCost(1, new Date(run_date).getTime()); // 1 is Electricity
+            } else { // Heating
+                cost = getEnergyCost(thermostat.heat_source_id, new Date(run_date).getTime());
+            }
+            grouped.set(run_date, { run_date, cost });
         }
 
         const entry = grouped.get(run_date);
@@ -1663,7 +1683,13 @@ const getHourlyRuntime = (req, res) => {
         const { ip } = req.params;
         const { hours } = req.query;
 
-        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        const thermostat = db.prepare(`
+            SELECT t.id, c.heat_source_id
+            FROM thermostats t
+            JOIN thermostat_compressor tc ON t.id = tc.thermostat_id
+            JOIN compressors c ON tc.compressor_id = c.id
+            WHERE t.ip = ?
+        `).get(ip);
         if (!thermostat) {
             return res.status(404).json({ error: "Thermostat not found" });
         }
@@ -1711,6 +1737,12 @@ const getHourlyRuntime = (req, res) => {
         // Step 2: Fill expected hours with HVAC and FAN rows or defaults
         const filledRows = expectedHours.map(hour => {
             const group = groupedMap.get(hour) || {};
+            let cost = null;
+            if (group.HVAC && group.HVAC.tmode === 2) { // Cooling
+                cost = getEnergyCost(1, new Date(hour).getTime()); // 1 is Electricity
+            } else { // Heating
+                cost = getEnergyCost(thermostat.heat_source_id, new Date(hour).getTime());
+            }
             const defaultRow = {
                 segment_hour: hour,
                 total_runtime_minutes: 0,
@@ -1722,6 +1754,7 @@ const getHourlyRuntime = (req, res) => {
 
             return {
                 segment_hour: hour,
+                cost: cost,
                 HVAC: group.HVAC ? {
                     ...defaultRow,
                     ...group.HVAC,

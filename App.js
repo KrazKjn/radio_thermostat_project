@@ -2,6 +2,7 @@ import React, { useContext } from "react";
 import { Alert, Text, View, SafeAreaView, Platform } from "react-native";
 import { NavigationContainer } from '@react-navigation/native';
 import ThermostatSelector from "./components/ThermostatSelector";
+import EnergyCosting from "./components/EnergyCosting";
 import { HostnameContext, HostnameProvider } from "./context/HostnameContext";
 import { useAuth, AuthProvider } from "./context/AuthContext";
 import { ThermostatProvider } from "./context/ThermostatContext";
@@ -28,10 +29,12 @@ const AppContent = () => {
               {Platform.OS === "web" ? (
                   <>
                       <ThermostatSelector />
+                      <EnergyCosting />
                   </>
               ) : (
                   <View>
                       <ThermostatSelector />
+                      <EnergyCosting />
                   </View>
               )}
         </SafeAreaView>

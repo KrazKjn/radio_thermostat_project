@@ -8,72 +8,23 @@ import { getChartColors } from './chartTheme';
 import { HVAC_MODE_COOL } from '../constants/hvac_mode';
 import commonStyles from '../styles/commonStyles';
 import withExport from './withExport';
+import {
+    costPerKwH,
+    costPerGallon,
+    hvacUsageDecimals,
+    hvacCostDecimals,
+    fanUsageDecimals,
+    fanCostDecimals,
+    calculateKwHsUsed,
+    calculateCoolingCost,
+    calculateGallonsConsumed,
+    calculateHeatingCost,
+    calculateFanKwHsUsed,
+    calculateFanCost,
+    formatMetric
+} from '../utils/costing';
 
 const Logger = require('./Logger');
-const costPerKwH = 0.126398563;
-const costPerGallon = 2.85;
-const hvacUsageDecimals = parseInt(process.env.HVAC_USAGE_DECIMALS) || 2;
-const hvacCostDecimals = parseInt(process.env.HVAC_COST_DECIMALS) || 2;
-const fanUsageDecimals = parseInt(process.env.FAN_USAGE_DECIMALS) || 3;
-const fanCostDecimals = parseInt(process.env.FAN_COST_DECIMALS) || 3;
-
-const parseVoltage = (voltageStr) => {
-    if (!voltageStr) return 230;
-    if (voltageStr.includes('/')) {
-        const parts = voltageStr.split('/').map(v => parseFloat(v));
-        return Math.max(...parts);
-    }
-    return parseFloat(voltageStr);
-};
-
-const calculateKwHDraw = (rla, voltage) =>
-    rla ? (rla * voltage) / 1000 : 3.5;
-
-const calculateKwHsUsed = (runtimeMin, hvac_system) => {
-  const voltage = parseVoltage(hvac_system?.voltage ?? hvac_system?.compressor_voltage);
-  const kwDraw = calculateKwHDraw(hvac_system?.rla, voltage);
-  return (runtimeMin / 60) * kwDraw;
-};
-
-const calculateCoolingCost = (runtimeMin, hvac_system, costPerKwH = 0.126) => {
-  const kwHsUsed = calculateKwHsUsed(runtimeMin, hvac_system);
-  return kwHsUsed * costPerKwH;
-};
-
-const calculateGallonsConsumed = (runtimeMin, hvac_system, efficiency = 0.90) => {
-  const heatingBTU =
-    hvac_system?.btu_per_hr_high ||
-    hvac_system?.btu_per_hr_low ||
-    (hvac_system?.tons * 20000);
-
-  const effectiveBTU = heatingBTU * efficiency;
-  const gallonsPerMinute = (effectiveBTU / 91452) / 60;
-
-  return runtimeMin * gallonsPerMinute;
-};
-
-const calculateHeatingCost = (runtimeMin, hvac_system, costPerGallon = 3.25, efficiency = 0.90) => {
-  const gallonsUsed = calculateGallonsConsumed(runtimeMin, hvac_system, efficiency);
-  return gallonsUsed * costPerGallon;
-};
-
-const calculateFanKwHDraw = (amps, voltage) =>
-  amps && voltage ? (amps * voltage) / 1000 : 0.5;
-
-const calculateFanKwHsUsed = (runtimeMin, hvac_system) => {
-  const voltage = parseVoltage(hvac_system?.fan_voltage);
-  const amps = hvac_system?.fan_rated_amps;
-  const kwDraw = calculateFanKwHDraw(amps, voltage);
-  return (runtimeMin / 60) * kwDraw;
-};
-
-const calculateFanCost = (runtimeMin, hvac_system, costPerKwH = 0.126) => {
-  const kwHsUsed = calculateFanKwHsUsed(runtimeMin, hvac_system);
-  return kwHsUsed * costPerKwH;
-};
-
-const formatMetric = (value, unit) =>
-  value != null ? `${value.toFixed(1)}${unit}` : '--';
 
 const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null, onDataChange, viewMode }) => {
   const hostname = React.useContext(HostnameContext);
@@ -120,15 +71,16 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
     const modeLabel = isCooling ? 'Cooling' : 'Heating';
     const fillColor = isCooling ? 'blue' : 'red';
 
+    const cost_per_unit = d.cost || (isCooling ? costPerKwH : costPerGallon);
     const costPerDay = isCooling
-    ? calculateCoolingCost(d.HVAC.total_runtime_minutes, hvac_system, costPerKwH)
-    : calculateHeatingCost(d.HVAC.total_runtime_minutes, hvac_system, costPerGallon);
+    ? calculateCoolingCost(d.HVAC.total_runtime_minutes, hvac_system, cost_per_unit)
+    : calculateHeatingCost(d.HVAC.total_runtime_minutes, hvac_system, cost_per_unit);
 
     const consumption = isCooling
     ? `${calculateKwHsUsed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} kWh`
     : `${calculateGallonsConsumed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} Gallons`;
 
-    const fan_costPerDay = calculateFanCost(d.FAN.total_runtime_minutes, hvac_system, costPerKwH);
+    const fan_costPerDay = calculateFanCost(d.FAN.total_runtime_minutes, hvac_system, cost_per_unit);
 
     const fan_consumption = `${calculateFanKwHsUsed(d.FAN.total_runtime_minutes, hvac_system).toFixed(fanUsageDecimals)} kWh`;
 
@@ -163,9 +115,10 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
     const fillColor = isCooling ? 'blue' : 'red';
 
     const runtime_hr = d.HVAC.total_runtime_minutes / 60;
+    const cost_per_unit = d.cost || (isCooling ? costPerKwH : costPerGallon);
     const costPerCycle = isCooling
-      ? calculateCoolingCost(d.HVAC.total_runtime_minutes, hvac_system, costPerKwH) / d.HVAC.cycle_count 
-      : calculateHeatingCost(d.HVAC.total_runtime_minutes, hvac_system, costPerGallon) / d.HVAC.cycle_count ;
+      ? calculateCoolingCost(d.HVAC.total_runtime_minutes, hvac_system, cost_per_unit) / d.HVAC.cycle_count
+      : calculateHeatingCost(d.HVAC.total_runtime_minutes, hvac_system, cost_per_unit) / d.HVAC.cycle_count ;
 
     const consumption = isCooling
       ? `${calculateKwHsUsed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} kWh`
@@ -173,7 +126,7 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
 
     // Merge fan data if present
     const fan_runtime_hr = d.FAN.total_runtime_minutes / 60;
-    const fan_costPerCycle = calculateFanCost(d.FAN.total_runtime_minutes, hvac_system, costPerKwH) / d.FAN.cycle_count;
+    const fan_costPerCycle = calculateFanCost(d.FAN.total_runtime_minutes, hvac_system, cost_per_unit) / d.FAN.cycle_count;
     const fan_consumption = `${calculateFanKwHsUsed(d.FAN.total_runtime_minutes, hvac_system).toFixed(fanUsageDecimals)} kWh`;
 
     const wearIndex = d.HVAC.cycle_count >= 6 ? '⚠️' : '';

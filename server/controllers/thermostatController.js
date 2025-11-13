@@ -1020,10 +1020,10 @@ const processCycleQueue = async () => {
       Logger.info(
         `Segmented ${unsegmentedTstate.length} HVAC and ${unsegmentedFstate.length} fan cycles`,
         'ThermostatController',
-        'captureStatIn'
+        'processCycleQueue'
       );
     } catch (err) {
-      Logger.error(`Error segmenting cycles: ${err.message}`, 'ThermostatController', 'captureStatIn');
+      Logger.error(`Error segmenting cycles: ${err.message}`, 'ThermostatController', 'processCycleQueue');
     }
   }
 };
@@ -1414,7 +1414,7 @@ const captureStatIn = async (req, res) => {
                     jsonData.tstat.tmode,
                     jsonData.tstat.tmode === HVAC_MODE_COOL ? jsonData.tstat.t_cool : jsonData.tstat.tmode === HVAC_MODE_HEAT ? jsonData.tstat.t_heat : null,
                     jsonData.tstat.tstate,
-                    jsonData.tstat.fstate === HVAC_FAN_STATE_OFF && jsonData.tstat.tstate === HVAC_MODE_HEAT ? HVAC_FAN_STATE_ON : HVAC_FAN_STATE_OFF
+                    jsonData.tstat.fstate === HVAC_FAN_STATE_OFF && jsonData.tstat.tstate === HVAC_MODE_HEAT ? HVAC_FAN_STATE_ON : jsonData.tstat.fstate
                 );
                 Logger.info(`Thermostat data saved: ${location}`, 'ThermostatController', 'captureStatIn');
                 if (!cache[ip]) {
@@ -1585,6 +1585,20 @@ const getDailyRuntime = (req, res) => {
         }
     }
 
+    // Ensure every entry has a FAN record
+    for (const entry of grouped.values()) {
+        if (!entry.FAN) {
+            entry.FAN = {
+                tmode: 0,
+                total_runtime_minutes: 0,
+                avg_indoor_temp: 0,
+                avg_outdoor_temp: 0,
+                avg_indoor_humidity: 0,
+                avg_outdoor_humidity: 0
+            };
+        }
+    }
+
     res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error in getDailyRuntime: ${error.message}`, 'ThermostatController', 'getDailyRuntime');
@@ -1671,6 +1685,20 @@ const getDailyModeRuntime = (req, res) => {
         }
     }
 
+    // Ensure every entry has a FAN record
+    for (const entry of grouped.values()) {
+        if (!entry.FAN) {
+            entry.FAN = {
+                tmode: 0,
+                total_runtime_minutes: 0,
+                avg_indoor_temp: 0,
+                avg_outdoor_temp: 0,
+                avg_indoor_humidity: 0,
+                avg_outdoor_humidity: 0
+            };
+        }
+    }
+
     res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error: ${error.message}`, 'ThermostatController', 'getDailyModeRuntime');
@@ -1732,6 +1760,20 @@ const getHourlyRuntime = (req, res) => {
                 groupedMap.set(hour, {});
             }
             groupedMap.get(hour)[type] = row;
+        }
+
+        // Ensure every entry has a FAN record
+        for (const entry of groupedMap.values()) {
+            if (!entry.FAN) {
+                entry.FAN = {
+                    tmode: 0,
+                    total_runtime_minutes: 0,
+                    avg_indoor_temp: 0,
+                    avg_outdoor_temp: 0,
+                    avg_indoor_humidity: 0,
+                    avg_outdoor_humidity: 0
+                };
+            }
         }
 
         // Step 2: Fill expected hours with HVAC and FAN rows or defaults
@@ -1971,6 +2013,21 @@ const getDailyCycles = (req, res) => {
         }
     }
 
+    // Ensure every entry has a FAN record
+    for (const entry of grouped.values()) {
+        if (!entry.FAN) {
+            entry.FAN = {
+                tmode: 0,
+                cycle_count: 0,
+                total_runtime_minutes: 0,
+                avg_indoor_temp: 0,
+                avg_outdoor_temp: 0,
+                avg_indoor_humidity: 0,
+                avg_outdoor_humidity: 0
+            };
+        }
+    }
+
     res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
@@ -2061,7 +2118,21 @@ const getHourlyCycles = (req, res) => {
             entry.HVAC = { tmode, ...rest };
         }
     }
-
+    // Ensure every entry has a FAN record
+    for (const entry of grouped.values()) {
+        if (!entry.FAN) {
+            entry.FAN = {
+                tmode: 0,
+                cycle_count: 0,
+                total_runtime_minutes: 0,
+                avg_indoor_temp: 0,
+                avg_outdoor_temp: 0,
+                avg_indoor_humidity: 0,
+                avg_outdoor_humidity: 0
+            };
+        }
+    }
+    
     res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error in getHourlyCycles: ${error.message}`, 'ThermostatController', 'getHourlyCycles');

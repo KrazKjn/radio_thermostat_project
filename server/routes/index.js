@@ -17,6 +17,7 @@ router.put('/energy/costing/:id', authWithRefresh, energyController.updateEnergy
 router.delete('/energy/costing/:id', authWithRefresh, energyController.deleteEnergyCosting);
 router.get('/energy/types', authWithRefresh, energyController.getEnergyTypes);
 router.get('/energy/units', authWithRefresh, energyController.getUnitTypes);
+router.get('/energy/consumption-report/:ip', authWithRefresh, energyController.getConsumptionReport);
 
 // Auth
 router.post('/login', authController.login);

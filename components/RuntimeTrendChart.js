@@ -47,7 +47,7 @@ const mapDailyData = (dailyJson, hvac_system) => {
         : `${calculateGallonsConsumed(hvac.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} Gallons`;
 
       const fan_cost = fan
-        ? calculateFanCost(fan.total_runtime_minutes, hvac_system, costPerKwH)
+        ? calculateFanCost(fan.total_runtime_minutes, hvac_system, cost_per_unit)
         : 0;
 
       const fan_consumption = fan

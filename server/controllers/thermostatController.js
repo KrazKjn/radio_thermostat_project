@@ -8,6 +8,7 @@ const { convertToTwoDecimalFloat, formatTimestamp } = require('../utils/utils');
 const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
 const { HVAC_FAN_STATE_OFF, HVAC_FAN_STATE_ON } = require('../../constants/hvac_fan');
 const { HVAC_SCAN_CLOUD } = require('../../constants/hvac_scan');
+const { ENERGY_TYPES } = require('../../constants/energy');
 const crypto = require('../utils/crypto');
 const Logger = require('../../components/Logger');
 
@@ -1020,10 +1021,10 @@ const processCycleQueue = async () => {
       Logger.info(
         `Segmented ${unsegmentedTstate.length} HVAC and ${unsegmentedFstate.length} fan cycles`,
         'ThermostatController',
-        'processCycleQueue'
+        'captureStatIn'
       );
     } catch (err) {
-      Logger.error(`Error segmenting cycles: ${err.message}`, 'ThermostatController', 'processCycleQueue');
+      Logger.error(`Error segmenting cycles: ${err.message}`, 'ThermostatController', 'captureStatIn');
     }
   }
 };
@@ -1414,7 +1415,7 @@ const captureStatIn = async (req, res) => {
                     jsonData.tstat.tmode,
                     jsonData.tstat.tmode === HVAC_MODE_COOL ? jsonData.tstat.t_cool : jsonData.tstat.tmode === HVAC_MODE_HEAT ? jsonData.tstat.t_heat : null,
                     jsonData.tstat.tstate,
-                    jsonData.tstat.fstate === HVAC_FAN_STATE_OFF && jsonData.tstat.tstate === HVAC_MODE_HEAT ? HVAC_FAN_STATE_ON : jsonData.tstat.fstate
+                    jsonData.tstat.fstate === HVAC_FAN_STATE_OFF && jsonData.tstat.tstate === HVAC_MODE_HEAT ? HVAC_FAN_STATE_ON : HVAC_FAN_STATE_OFF
                 );
                 Logger.info(`Thermostat data saved: ${location}`, 'ThermostatController', 'captureStatIn');
                 if (!cache[ip]) {
@@ -1570,7 +1571,7 @@ const getDailyRuntime = (req, res) => {
         if (!grouped.has(run_date)) {
             let cost = null;
             if (tmode === 2) { // Cooling
-                cost = getEnergyCost(1, new Date(run_date).getTime()); // 1 is Electricity
+                cost = getEnergyCost(ENERGY_TYPES.ELECTRICITY, new Date(run_date).getTime());
             } else { // Heating
                 cost = getEnergyCost(thermostat.heat_source_id, new Date(run_date).getTime());
             }
@@ -1582,20 +1583,6 @@ const getDailyRuntime = (req, res) => {
             entry.FAN = { tmode, ...rest };
         } else {
             entry.HVAC = { tmode, ...rest };
-        }
-    }
-
-    // Ensure every entry has a FAN record
-    for (const entry of grouped.values()) {
-        if (!entry.FAN) {
-            entry.FAN = {
-                tmode: 0,
-                total_runtime_minutes: 0,
-                avg_indoor_temp: 0,
-                avg_outdoor_temp: 0,
-                avg_indoor_humidity: 0,
-                avg_outdoor_humidity: 0
-            };
         }
     }
 
@@ -1685,20 +1672,6 @@ const getDailyModeRuntime = (req, res) => {
         }
     }
 
-    // Ensure every entry has a FAN record
-    for (const entry of grouped.values()) {
-        if (!entry.FAN) {
-            entry.FAN = {
-                tmode: 0,
-                total_runtime_minutes: 0,
-                avg_indoor_temp: 0,
-                avg_outdoor_temp: 0,
-                avg_indoor_humidity: 0,
-                avg_outdoor_humidity: 0
-            };
-        }
-    }
-
     res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error: ${error.message}`, 'ThermostatController', 'getDailyModeRuntime');
@@ -1762,26 +1735,12 @@ const getHourlyRuntime = (req, res) => {
             groupedMap.get(hour)[type] = row;
         }
 
-        // Ensure every entry has a FAN record
-        for (const entry of groupedMap.values()) {
-            if (!entry.FAN) {
-                entry.FAN = {
-                    tmode: 0,
-                    total_runtime_minutes: 0,
-                    avg_indoor_temp: 0,
-                    avg_outdoor_temp: 0,
-                    avg_indoor_humidity: 0,
-                    avg_outdoor_humidity: 0
-                };
-            }
-        }
-
         // Step 2: Fill expected hours with HVAC and FAN rows or defaults
         const filledRows = expectedHours.map(hour => {
             const group = groupedMap.get(hour) || {};
             let cost = null;
             if (group.HVAC && group.HVAC.tmode === 2) { // Cooling
-                cost = getEnergyCost(1, new Date(hour).getTime()); // 1 is Electricity
+                cost = getEnergyCost(ENERGY_TYPES.ELECTRICITY, new Date(hour).getTime());
             } else { // Heating
                 cost = getEnergyCost(thermostat.heat_source_id, new Date(hour).getTime());
             }
@@ -2013,21 +1972,6 @@ const getDailyCycles = (req, res) => {
         }
     }
 
-    // Ensure every entry has a FAN record
-    for (const entry of grouped.values()) {
-        if (!entry.FAN) {
-            entry.FAN = {
-                tmode: 0,
-                cycle_count: 0,
-                total_runtime_minutes: 0,
-                avg_indoor_temp: 0,
-                avg_outdoor_temp: 0,
-                avg_indoor_humidity: 0,
-                avg_outdoor_humidity: 0
-            };
-        }
-    }
-
     res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
@@ -2118,21 +2062,7 @@ const getHourlyCycles = (req, res) => {
             entry.HVAC = { tmode, ...rest };
         }
     }
-    // Ensure every entry has a FAN record
-    for (const entry of grouped.values()) {
-        if (!entry.FAN) {
-            entry.FAN = {
-                tmode: 0,
-                cycle_count: 0,
-                total_runtime_minutes: 0,
-                avg_indoor_temp: 0,
-                avg_outdoor_temp: 0,
-                avg_indoor_humidity: 0,
-                avg_outdoor_humidity: 0
-            };
-        }
-    }
-    
+
     res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error in getHourlyCycles: ${error.message}`, 'ThermostatController', 'getHourlyCycles');

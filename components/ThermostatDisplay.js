@@ -17,6 +17,8 @@ import DataChart from "./DataChart";
 import commonStyles from "../styles/commonStyles";
 import OptionsInfo from "./OptionsInfo";
 import UserManagement from "./UserManagement";
+import EnergyCosting from "./EnergyCosting";
+import ConsumptionReport from "./ConsumptionReport";
 
 const Logger = require('./Logger');
 
@@ -232,6 +234,16 @@ const ThermostatDisplay = ({
                 />
             );
         }
+        if (activeScreen === "energyCosting") {
+            return (
+                <EnergyCosting />
+            );
+        }
+        if (activeScreen === "ConsumptionReport") {
+            return (
+                <ConsumptionReport />
+            );
+        }
         if (activeScreen === "options") {
             return (
                 <OptionsInfo thermostat={thermostat} />
@@ -270,6 +282,14 @@ const ThermostatDisplay = ({
                     <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("users")}>
                         <Icon name="settings-outline" size={28} color={activeScreen === "users" ? "#0ff" : "#aaa"} />
                         <Text style={commonStyles.menuText}>Users</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("energyCosting")}>
+                        <Icon name="flash-outline" size={28} color={activeScreen === "energyCosting" ? "#0ff" : "#aaa"} />
+                        <Text style={commonStyles.menuText}>Energy</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("ConsumptionReport")}>
+                        <Icon name="pricetag-outline" size={28} color={activeScreen === "ConsumptionReport" ? "#0ff" : "#aaa"} />
+                        <Text style={commonStyles.menuText}>Consumption Report</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("options")}>
                         <Icon name="settings-outline" size={28} color={activeScreen === "options" ? "#0ff" : "#aaa"} />

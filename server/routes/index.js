@@ -5,9 +5,19 @@ const thermostatController = require('../controllers/thermostatController');
 const userController = require('../controllers/userController');
 const authController = require('../controllers/authController');
 const weatherController = require('../controllers/weatherController');
+const energyController = require('../controllers/energyController');
 
 // Helper to apply both middlewares
 const authWithRefresh = [authenticateToken, refreshTokenMiddleware];
+
+// Energy
+router.get('/energy/costing', authWithRefresh, energyController.getEnergyCosting);
+router.post('/energy/costing', authWithRefresh, energyController.addEnergyCosting);
+router.put('/energy/costing/:id', authWithRefresh, energyController.updateEnergyCosting);
+router.delete('/energy/costing/:id', authWithRefresh, energyController.deleteEnergyCosting);
+router.get('/energy/types', authWithRefresh, energyController.getEnergyTypes);
+router.get('/energy/units', authWithRefresh, energyController.getUnitTypes);
+router.get('/energy/consumption-report/:ip', authWithRefresh, energyController.getConsumptionReport);
 
 // Auth
 router.post('/login', authController.login);

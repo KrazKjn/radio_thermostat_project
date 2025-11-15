@@ -9,7 +9,9 @@ const {
     calculateFanCost,
 } = require('../../utils/costing');
 const { ENERGY_TYPES } = require('../../constants/energy');
-const { HVAC_MODE_COOL } = require('../../constants/hvac_mode');
+const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
+const MAX_CYCLE_RUNTIME_MINUTES = 120.0; // 2 hours
+const MIN_CYCLE_RUNTIME_MINUTES = 2.0; // 2 minutes
 
 
 const getEnergyCosting = (req, res) => {
@@ -95,46 +97,56 @@ const getUnitTypes = (req, res) => {
 };
 
 const createSummary = () => ({
-    hvac: { runtime: 0, cost: 0, consumption: 0 },
-    fan: { runtime: 0, cost: 0, consumption: 0 },
-    total: { runtime: 0, cost: 0 }
+  total: { cost: 0, runtime: 0 },
+  heating: { cost: 0, consumption: 0, fan: { cost: 0, runtime: 0 } },
+  cooling: { cost: 0, consumption: 0, fan: { cost: 0, runtime: 0 } }
 });
 
-const updateSummary = (summary, data, type) => {
-    summary[type].runtime += data.runtime;
-    summary[type].cost += data.cost;
-    summary[type].consumption += data.consumption;
-    summary.total.runtime += data.runtime;
-    summary.total.cost += data.cost;
+const updateSummary = (summary, cycleData, type, tmode) => {
+  summary.total.cost += cycleData.cost;
+  summary.total.runtime += cycleData.runtime;
+
+  const isCooling = tmode === HVAC_MODE_COOL;
+  const target = isCooling ? summary.cooling : summary.heating;
+
+  if (type === 'hvac') {
+    target.cost += cycleData.cost;
+    target.consumption += cycleData.consumption;
+  } else if (type === 'fan') {
+    target.fan.cost += cycleData.cost;
+    target.fan.runtime += cycleData.runtime;
+  }
 };
 
 const getConsumptionReport = (req, res) => {
     try {
         const { ip } = req.params;
+        let whereClause = '';
+        if (ip && ip.length > 0 && ip !== 'all') {
+            whereClause = `WHERE t.ip = '${ip}'`;
+        }
 
-        const hvac_system = db.prepare(`
+        const hvac_systems = db.prepare(`
             SELECT
                 t.id as thermostat_id,
                 c.heat_source_id,
                 c.voltage as compressor_voltage,
                 c.rla,
                 f.voltage as fan_voltage,
-                f.rated_amps as fan_rated_amps
+                f.rated_amps as fan_rated_amps,
+                c.btu_per_hr_high,
+                c.btu_per_hr_low,
+                c.capacity AS tons
             FROM thermostats t
-            JOIN thermostat_compressor tc ON t.id = tc.thermostat_id
-            JOIN compressors c ON tc.compressor_id = c.id
-            JOIN thermostat_fan f ON t.id = f.thermostat_id
-            WHERE t.ip = ?
-        `).get(ip);
+            JOIN compressors c ON c.thermostat_id = t.id
+            JOIN fan_motors f ON t.id = f.thermostat_id
+            ${whereClause}
+        `).all();
 
-        if (!hvac_system) {
+        if (!hvac_systems) {
             return res.status(404).json({ error: "Thermostat with detailed HVAC system not found" });
         }
 
-        const { thermostat_id, heat_source_id } = hvac_system;
-
-        const hvacCycles = db.prepare(`SELECT * FROM view_tstate_cycles WHERE thermostat_id = ?`).all(thermostat_id);
-        const fanCycles = db.prepare(`SELECT * FROM view_fstate_cycles WHERE thermostat_id = ?`).all(thermostat_id);
         const energyCosts = db.prepare('SELECT * FROM energy_costing ORDER BY effective_start_date DESC').all();
 
         const getCostForDate = (energy_type_id, date) => {
@@ -148,39 +160,47 @@ const getConsumptionReport = (req, res) => {
 
         const processedCycles = [];
 
-        hvacCycles.forEach(cycle => {
-            if (cycle.run_time === null) return;
-            const isCooling = cycle.tmode === HVAC_MODE_COOL;
-            const energy_type_id = isCooling ? ENERGY_TYPES.ELECTRICITY : heat_source_id;
-            const cost_per_unit = getCostForDate(energy_type_id, cycle.run_date);
+        hvac_systems.forEach(system => {
+            const { thermostat_id, heat_source_id } = system;
 
-            let cost = 0;
-            let consumption = 0;
+            const hvacCycles = db.prepare(`SELECT * FROM view_tstate_cycles WHERE thermostat_id = ? AND run_time >= ? AND run_time <= ?`).all(thermostat_id, MIN_CYCLE_RUNTIME_MINUTES, MAX_CYCLE_RUNTIME_MINUTES);
+            const fanCycles = db.prepare(`SELECT * FROM view_fstate_cycles WHERE thermostat_id = ? AND run_time >= ? AND run_time <= ?`).all(thermostat_id, MIN_CYCLE_RUNTIME_MINUTES, MAX_CYCLE_RUNTIME_MINUTES);
 
-            if (cost_per_unit !== null) {
-                if (isCooling) {
-                    cost = calculateCoolingCost(cycle.run_time, hvac_system, cost_per_unit);
-                    consumption = calculateKwHsUsed(cycle.run_time, hvac_system);
-                } else {
-                    cost = calculateHeatingCost(cycle.run_time, hvac_system, cost_per_unit);
-                    consumption = calculateGallonsConsumed(cycle.run_time, hvac_system);
+            hvacCycles.forEach(cycle => {
+                if (cycle.run_time === null) return;
+                const isCooling = cycle.tmode === HVAC_MODE_COOL;
+                const energy_type_id = isCooling ? ENERGY_TYPES.ELECTRICITY : heat_source_id;
+                const cost_per_unit = getCostForDate(energy_type_id, cycle.run_date);
+
+                let cost = 0;
+                let consumption = 0;
+
+                if (cost_per_unit !== null) {
+                    cost = isCooling
+                        ? calculateCoolingCost(cycle.run_time, system, cost_per_unit)
+                        : calculateHeatingCost(cycle.run_time, system, cost_per_unit);
+                    consumption = isCooling
+                        ? calculateKwHsUsed(cycle.run_time, system)
+                        : calculateGallonsConsumed(cycle.run_time, system);
                 }
-            }
 
-            processedCycles.push({ ...cycle, cost, consumption, type: 'hvac' });
-        });
+                processedCycles.push({ ...cycle, cost, consumption, type: 'hvac', tmode: cycle.tmode });
+            });
 
-        fanCycles.forEach(cycle => {
-            if (cycle.run_time === null) return;
-            const cost_per_unit = getCostForDate(ENERGY_TYPES.ELECTRICITY, cycle.run_date);
-            let cost = 0;
-            let consumption = 0;
+            fanCycles.forEach(cycle => {
+                if (cycle.run_time === null) return;
+                const cost_per_unit = getCostForDate(ENERGY_TYPES.ELECTRICITY, cycle.run_date);
 
-            if (cost_per_unit !== null) {
-                cost = calculateFanCost(cycle.run_time, hvac_system, cost_per_unit);
-                consumption = calculateFanKwHsUsed(cycle.run_time, hvac_system);
-            }
-            processedCycles.push({ ...cycle, cost, consumption, type: 'fan' });
+                let cost = 0;
+                let consumption = 0;
+
+                if (cost_per_unit !== null) {
+                    cost = calculateFanCost(cycle.run_time, system, cost_per_unit);
+                    consumption = calculateFanKwHsUsed(cycle.run_time, system);
+                }
+
+                processedCycles.push({ ...cycle, cost, consumption, type: 'fan', tmode: null }); // Fan doesn't have tmode
+            });
         });
 
         const report = {};
@@ -228,10 +248,10 @@ const getConsumptionReport = (req, res) => {
                 consumption: cycle.consumption
             };
 
-            updateSummary(report[year].summary, cycleData, cycle.type);
-            updateSummary(report[year].months[month].summary, cycleData, cycle.type);
-            updateSummary(report[year].months[month].weeks[week].summary, cycleData, cycle.type);
-            updateSummary(report[year].months[month].weeks[week].days[day], cycleData, cycle.type);
+            updateSummary(report[year].summary, cycleData, cycle.type, cycle.tmode);
+            updateSummary(report[year].months[month].summary, cycleData, cycle.type, cycle.tmode);
+            updateSummary(report[year].months[month].weeks[week].summary, cycleData, cycle.type, cycle.tmode);
+            updateSummary(report[year].months[month].weeks[week].days[day], cycleData, cycle.type, cycle.tmode);
         });
 
         res.json(report);

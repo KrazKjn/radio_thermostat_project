@@ -80,7 +80,7 @@ const CycleAnalyticsChart = ({ thermostatIp, isDarkMode, parentComponent = null,
     ? `${calculateKwHsUsed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} kWh`
     : `${calculateGallonsConsumed(d.HVAC.total_runtime_minutes, hvac_system).toFixed(hvacUsageDecimals)} Gallons`;
 
-    const fan_costPerDay = calculateFanCost(d.FAN.total_runtime_minutes, hvac_system, cost_per_unit);
+    const fan_costPerDay = calculateFanCost(d.FAN.total_runtime_minutes, hvac_system, costPerKwH);
 
     const fan_consumption = `${calculateFanKwHsUsed(d.FAN.total_runtime_minutes, hvac_system).toFixed(fanUsageDecimals)} kWh`;
 

@@ -1,11 +1,7 @@
-// TODO: Frontend verification of this component could not be completed due to issues running the application.
 import React, { useContext } from "react";
-import { Alert, Text, View, SafeAreaView, Platform, Button } from "react-native";
+import { Alert, Text, View, SafeAreaView, Platform } from "react-native";
 import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ThermostatSelector from "./components/ThermostatSelector";
-import EnergyCosting from "./components/EnergyCosting";
-import ConsumptionReportScreen from "./screens/ConsumptionReportScreen";
 import { HostnameContext, HostnameProvider } from "./context/HostnameContext";
 import { useAuth, AuthProvider } from "./context/AuthContext";
 import { ThermostatProvider } from "./context/ThermostatContext";
@@ -14,43 +10,39 @@ import { UserProvider } from './context/UserContext';
 import { DataRefreshProvider } from "./context/DataRefreshContext";
 import { WeatherProvider } from "./context/WeatherContext";
 
-const Stack = createNativeStackNavigator();
-
-const MainScreen = ({ navigation }) => (
-    <SafeAreaView style={{ flex: 1 }}>
-        <Button
-            title="Go to Consumption Report"
-            onPress={() => navigation.navigate('ConsumptionReport')}
-        />
-        {Platform.OS === "web" ? (
-            <>
-                <ThermostatSelector />
-                <EnergyCosting />
-            </>
-        ) : (
-            <View>
-                <ThermostatSelector />
-                <EnergyCosting />
-            </View>
-        )}
-    </SafeAreaView>
-);
+const showAlert = () => {
+  if (Platform.OS === "web") {
+    alert("Notice: This is a simple alert!"); // Standard browser alert
+  } else {
+    Alert.alert("Notice", "This is a simple alert!"); // Native alert
+  }
+};
 
 const AppContent = () => {
     const { token } = useAuth();
     const hostname = useContext(HostnameContext);
 
+    // Render login if not authenticated, otherwise render your app
     return token ? (
-        <Stack.Navigator>
-            <Stack.Screen name="Main" component={MainScreen} />
-            <Stack.Screen name="ConsumptionReport" component={ConsumptionReportScreen} />
-        </Stack.Navigator>
+        <SafeAreaView style={{ flex: 1 }}>
+              {Platform.OS === "web" ? (
+                  <>
+                      <ThermostatSelector />
+                  </>
+              ) : (
+                  <View>
+                      <ThermostatSelector />
+                  </View>
+              )}
+        </SafeAreaView>
     ) : (
         hostname === "Loading..." ? <Text>Loading ...</Text> : <LoginScreen />
     );
 };
 
 const App = () => {
+  const hostname = useContext(HostnameContext);
+
   return (
     <NavigationContainer>
       <HostnameProvider>

@@ -561,3 +561,14 @@ CREATE TABLE IF NOT EXISTS fan_motors (
   horsepower REAL,
   efficiency REAL
 );
+
+CREATE TABLE IF NOT EXISTS report_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    thermostat_id INTEGER NOT NULL,
+    report_type TEXT NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (thermostat_id) REFERENCES thermostats(id),
+    UNIQUE(user_id, thermostat_id, report_type)
+);

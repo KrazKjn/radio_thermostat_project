@@ -83,4 +83,8 @@ router.post('/captureStatIn', thermostatController.captureStatIn);
 // Weather
 router.get('/weather', authWithRefresh, weatherController.getWeather);
 
+// Subscriptions
+const subscriptionRoutes = require('./subscriptions');
+router.use('/subscriptions', authWithRefresh, subscriptionRoutes);
+
 module.exports = router;

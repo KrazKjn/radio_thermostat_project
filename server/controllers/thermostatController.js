@@ -2154,7 +2154,7 @@ const getHourlyCycles = (req, res) => {
             };
         }
     }
-    
+
     res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error in getHourlyCycles: ${error.message}`, 'ThermostatController', 'getHourlyCycles');

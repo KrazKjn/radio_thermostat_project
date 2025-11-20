@@ -1141,6 +1141,24 @@ export const ThermostatProvider = ({ children }) => {
       }
   };
 
+  const getEnergyUsage = async (thermostatIp, hostname) => {
+    try {
+        const response = await authenticatedApiFetch(
+            `${hostname}/energy/usage/${thermostatIp}`,
+            "GET",
+            null,
+            `Error fetching consumption report: ${thermostatIp}`,
+            `Fetching consumption report: ${thermostatIp}...`
+        );
+        console.log(`Fetched consumption report: ${thermostatIp}`, response);
+        return response;
+    } catch (error) {
+        console.log(`Error fetching consumption report: ${thermostatIp}`, error);
+        console.error(`Error fetching consumption report: ${thermostatIp}`, error);
+        throw error;
+    }
+  };
+
   return (
     <ThermostatContext.Provider
         value={{
@@ -1191,6 +1209,7 @@ export const ThermostatProvider = ({ children }) => {
             getFanVsHvacDaily,
             getDailyCycles,
             getHourlyCycles,
+            getEnergyUsage,
         }}
     >
         {children}

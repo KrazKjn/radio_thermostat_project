@@ -185,39 +185,6 @@ FROM readings_with_next
 WHERE next_ts IS NOT NULL
 GROUP BY day, ip;
 
--- DROP TRIGGER IF EXISTS log_tstate_cycle;
--- CREATE TRIGGER log_tstate_cycle
--- AFTER INSERT ON scan_data
--- FOR EACH ROW
--- BEGIN
---     -- Case 1: INSERT new cycle if tstate = 1 and no open cycle exists
---     INSERT INTO tstate_cycles (
---         thermostat_id,
---         tmode,
---         start_timestamp,
---         start_time
---     )
---     SELECT
---         NEW.thermostat_id,
---         NEW.tmode,
---         NEW.timestamp,
---         datetime(NEW.timestamp / 1000, 'unixepoch')
---     WHERE NEW.tstate != 0
---       AND NOT EXISTS (
---           SELECT 1 FROM tstate_cycles
---           WHERE thermostat_id = NEW.thermostat_id
---             AND stop_timestamp IS NULL
---       );
-
---     -- Case 2: UPDATE last open cycle if tstate = 0
---     UPDATE tstate_cycles
---     SET stop_timestamp = NEW.timestamp,
---         stop_time = datetime(NEW.timestamp / 1000, 'unixepoch'),
---         run_time = ROUND((NEW.timestamp - start_timestamp) / 60000.0, 2)
---     WHERE thermostat_id = NEW.thermostat_id
---       AND stop_timestamp IS NULL
---       AND NEW.tstate = 0;
--- END;
 DROP TRIGGER IF EXISTS log_tstate_cycle;
 CREATE TRIGGER log_tstate_cycle
 AFTER INSERT ON scan_data
@@ -235,7 +202,7 @@ BEGIN
         NEW.tmode,
         NEW.timestamp,
         datetime(NEW.timestamp / 1000, 'unixepoch')
-    WHERE NEW.tstate = 1
+    WHERE NEW.tstate IN (1, 2)
       AND NEW.tmode IN (1, 2)
       AND NOT EXISTS (
           SELECT 1 FROM tstate_cycles

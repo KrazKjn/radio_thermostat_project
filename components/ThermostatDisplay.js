@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import { useAuth } from "../context/AuthContext";
 import { useThermostat } from "../context/ThermostatContext";
+import { UserContext } from '../context/UserContext';
 import DataRefreshContext from "../context/DataRefreshContext";
 import ThermostatToggle from "./ThermostatToggle";
 import FanToggle from "./FanToggle";
@@ -15,6 +16,7 @@ import ThermostatScheduler from "./ThermostatScheduler";
 import DataChart from "./DataChart";
 import commonStyles from "../styles/commonStyles";
 import OptionsInfo from "./OptionsInfo";
+import UserManagement from "./UserManagement";
 
 const Logger = require('./Logger');
 
@@ -31,6 +33,7 @@ const ThermostatDisplay = ({
         rebootThermostatServer,
     } = useThermostat();
     const { tokenInfo, logout: authLogout } = useAuth();
+    const { users, updateUser, disableUser } = useContext(UserContext);
     const { register, unregister } = useContext(DataRefreshContext);
     const showTempControlModes = new Set([1, 2]);
     const showMenu = true;
@@ -61,6 +64,26 @@ const ThermostatDisplay = ({
             return () => unregister(listenerId);
         }
     }, [activeScreen, thermostatIp, hostname, getCurrentTemperature, register, unregister]);
+
+    // Handler to update a user
+    const handleUserUpdate = async (userId, updates) => {
+        try {
+            await updateUser(userId, updates);
+            // Optionally show a success message or refresh users
+        } catch (err) {
+            // Handle error (show message, etc.)
+        }
+    };
+
+    // Handler to disable (delete) a user
+    const handleUserDelete = async (userId) => {
+        try {
+            await disableUser(userId);
+            // Optionally show a success message or refresh users
+        } catch (err) {
+            // Handle error (show message, etc.)
+        }
+    };
 
     const rebootThermostat = async (thermostatIp, hostname) => {
         try {
@@ -200,6 +223,15 @@ const ThermostatDisplay = ({
         if (activeScreen === "chart") {
             return <DataChart thermostatIp={thermostatIp} parentComponent={this} />;
         }
+        if (activeScreen === "users") {
+            return (
+                <UserManagement
+                    users={users}
+                    onUserUpdate={handleUserUpdate}
+                    onUserDelete={handleUserDelete}
+                />
+            );
+        }
         if (activeScreen === "options") {
             return (
                 <OptionsInfo thermostat={thermostat} />
@@ -234,6 +266,10 @@ const ThermostatDisplay = ({
                     <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("schedule")}>
                         <Icon name="calendar-outline" size={28} color={activeScreen === "schedule" ? "#0ff" : "#aaa"} />
                         <Text style={commonStyles.menuText}>Schedules</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("users")}>
+                        <Icon name="settings-outline" size={28} color={activeScreen === "users" ? "#0ff" : "#aaa"} />
+                        <Text style={commonStyles.menuText}>Users</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={commonStyles.menuItem} onPress={() => setActiveScreen("options")}>
                         <Icon name="settings-outline" size={28} color={activeScreen === "options" ? "#0ff" : "#aaa"} />

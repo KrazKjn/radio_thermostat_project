@@ -126,7 +126,7 @@ export const ThermostatProvider = ({ children }) => {
     });
   }, []);
 
-  const updateThermostatName = useCallback(async (thermostatIp, name, hostname) => {
+  const updateThermostatName = async (thermostatIp, name, hostname) => {
     try {
       const data = await authenticatedApiFetch(
         `${hostname}/thermostat/name/${thermostatIp}`,
@@ -150,9 +150,9 @@ export const ThermostatProvider = ({ children }) => {
       Logger.error(`Error updating thermostat name: ${error.message}`, 'ThermostatContext', 'updateThermostatName');
       throw new Error("Failed to update thermostat name.");
     }
-  }, [authenticatedApiFetch, updateThermostatState, thermostats]);
+  };
 
-  const rebootThermostatServer = useCallback(async (thermostatIp, hostname) => {
+  const rebootThermostatServer = async (thermostatIp, hostname) => {
     try {
       Logger.info("Rebooting thermostat...", 'ThermostatContext', 'rebootThermostatServer');
       const data = await authenticatedApiFetch(
@@ -176,9 +176,9 @@ export const ThermostatProvider = ({ children }) => {
       Logger.error(`Error rebooting thermostat: ${error.message}`, 'ThermostatContext', 'rebootThermostatServer');
       throw new Error("Failed to reboot thermostat.");
     }
-  }, [authenticatedApiFetch, updateThermostatState, thermostats]);
+  };
 
-  const updateThermostatTargetTemperature = useCallback(async (thermostatIp, hostname, tempMode, targetTemp) => {
+  const updateThermostatTargetTemperature = async (thermostatIp, hostname, tempMode, targetTemp) => {
     try {
       const data = await authenticatedApiFetch(
         `${hostname}/tstat/${thermostatIp}`,
@@ -196,7 +196,7 @@ export const ThermostatProvider = ({ children }) => {
       Logger.error(`Error updating target temperature: ${error.message}`, 'ThermostatContext', 'updateThermostatTargetTemperature');
       throw new Error("Failed to update target temperature.");
     }
-  }, [authenticatedApiFetch, updateThermostatState]);
+  };
 
   const fetchThermostatData = useCallback(async (thermostatIp, hostname, timeout) => {
     if (!hostname || !thermostatIp || thermostatIp === "Loading ...") {
@@ -318,7 +318,7 @@ export const ThermostatProvider = ({ children }) => {
     }
   }, [thermostats, fetchThermostatData]);
 
-  const fetchModelInfo = useCallback(async (thermostatIp, hostname) => {
+  const fetchModelInfo = async (thermostatIp, hostname) => {
     try {
         const data = await authenticatedApiFetch(
             `${hostname}/thermostat/${thermostatIp}`,
@@ -349,9 +349,9 @@ export const ThermostatProvider = ({ children }) => {
         Logger.error(`Error fetching model info: ${error.message}`, 'ThermostatContext', 'fetchModelInfo');
         throw new Error("Failed to fetch model info.");
     }
-  }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState, thermostats]);
+  };
 
-  const fetchModelInfoDetailed = useCallback(async (thermostatIp, hostname) => {
+  const fetchModelInfoDetailed = async (thermostatIp, hostname) => {
     try {
         const data = await authenticatedApiFetch(
             `${hostname}/thermostat/detailed/${thermostatIp}`,
@@ -381,9 +381,9 @@ export const ThermostatProvider = ({ children }) => {
         Logger.error(`Error fetching detailed model info: ${error.message}`, 'ThermostatContext', 'fetchModelInfoDetailed');
         throw new Error("Failed to fetch detailed model info.");
     }
-  }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState, thermostats]);
+  };
   
-    const fetchModelInfoList = useCallback(async (ipList, hostname) => {
+    const fetchModelInfoList = async (ipList, hostname) => {
         try {
             if (!ipList?.length) {
                 console.warn("No IP addresses provided.");
@@ -425,9 +425,9 @@ export const ThermostatProvider = ({ children }) => {
             console.error("Error fetching model info:", error);
             throw error;
         }
-    }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState]);
+    };
     
-    const fetchThermostatName = useCallback(async (thermostatIp, hostname) => {
+    const fetchThermostatName = async (thermostatIp, hostname) => {
     try {
         const data = await authenticatedApiFetch(
             `${hostname}/name/${thermostatIp}`,
@@ -455,24 +455,24 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error fetching thermostat name:", error);
         throw new Error("Failed to fetch thermostat name.");
     }
-  }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState, thermostats]);
+  };
 
-  const addThermostatInState = useCallback((thermostatIp, initialState) => {
+  const addThermostatInState = (thermostatIp, initialState) => {
     setThermostats((prevState) => ({
       ...prevState,
       [thermostatIp]: initialState,
     }));
-  }, []);
+  };
 
-  const removeThermostatFromState = useCallback((thermostatIp) => {
+  const removeThermostatFromState = (thermostatIp) => {
     setThermostats((prevState) => {
       const newState = { ...prevState };
       delete newState[thermostatIp];
       return newState;
     });
-  }, []);
+  };
 
-  const updateThermostatTime = useCallback(async (thermostatIp, hostname) => {
+  const updateThermostatTime = async (thermostatIp, hostname) => {
     try {
         const now = new Date();
         now.setSeconds(now.getSeconds() + 10); // Add 10 seconds
@@ -507,9 +507,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error updating thermostat time:", error);
         throw new Error("Failed to update thermostat time.");
     }
-  }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState]);
+  };
 
-  const updateThermostatMode = useCallback(async (thermostatIp, newMode, hostname) => {
+  const updateThermostatMode = async (thermostatIp, newMode, hostname) => {
     try {
         const currentThermostat = thermostats[thermostatIp];
         if (currentThermostat?.currentTempMode === newMode) {
@@ -549,9 +549,9 @@ export const ThermostatProvider = ({ children }) => {
             currentTempMode: currentThermostat?.currentTempMode,
         });
     }
-  }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState, thermostats]);
+  };
 
-  const updateFanMode = useCallback(async (thermostatIp, newMode, hostname) => {
+  const updateFanMode = async (thermostatIp, newMode, hostname) => {
     try {
         const currentThermostat = thermostats[thermostatIp];
         if (currentThermostat?.currentFanMode === newMode) {
@@ -591,9 +591,9 @@ export const ThermostatProvider = ({ children }) => {
             currentFanMode: currentThermostat?.currentFanMode,
         });
     }
-  }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState, thermostats]);
+  };
 
-  const updateHoldMode = useCallback(async (thermostatIp, newMode, hostname) => {
+  const updateHoldMode = async (thermostatIp, newMode, hostname) => {
     try {
         const currentThermostat = thermostats[thermostatIp];
         if (currentThermostat?.hold === newMode) {
@@ -631,9 +631,9 @@ export const ThermostatProvider = ({ children }) => {
             hold: currentThermostat?.hold
         });
     }
-  }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState, thermostats]);
+  };
 
-  const updateOverrideMode = useCallback(async (thermostatIp, newMode, hostname) => {
+  const updateOverrideMode = async (thermostatIp, newMode, hostname) => {
     try {
         const currentThermostat = thermostats[thermostatIp];
         if (currentThermostat?.override === newMode) {
@@ -671,9 +671,9 @@ export const ThermostatProvider = ({ children }) => {
             override: currentThermostat?.override
         });
     }
-  }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState, thermostats]);
+  };
 
-    const fetchSwingValue = useCallback(async (thermostatIp, hostname) => {
+    const fetchSwingValue = async (thermostatIp, hostname) => {
         try {
             const data = await authenticatedApiFetch(
                 `${hostname}/tswing/${thermostatIp}`,
@@ -693,9 +693,9 @@ export const ThermostatProvider = ({ children }) => {
             console.error("Error fetching thermostat swing value:", error);
             throw error;
         }
-    }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState]);
+    };
     
-  const updateSwingSetting = useCallback(async (thermostatIp, value, hostname) => {
+  const updateSwingSetting = async (thermostatIp, value, hostname) => {
     try {
         const valueAPI = -value; // Invert the value for the API
         console.log("Set Swing value:", valueAPI.toFixed(2));
@@ -717,9 +717,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error updating swing:", error);
         throw error;
     }
-  }, [authenticatedApiFetch, formatCurrentTime, updateThermostatState]);
+  };
 
-  const fetchCachedData = useCallback(async (thermostatIp, hostname) => {
+  const fetchCachedData = async (thermostatIp, hostname) => {
     try {
         const cachedData = await authenticatedApiFetch(
             `${hostname}/cache/${thermostatIp}`,
@@ -740,10 +740,10 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error fetching cached thermostat data:", error);
         throw error;
     }
-  }, [authenticatedApiFetch, updateThermostatState]);
+  };
 
   // Start scanner
-  const startScanner = useCallback(async (thermostatIp, hostname, interval = 60000) => {
+  const startScanner = async (thermostatIp, hostname, interval = 60000) => {
     try {
         const response = await authenticatedApiFetch(
             `${hostname}/scanner/start/${thermostatIp}`,
@@ -756,10 +756,10 @@ export const ThermostatProvider = ({ children }) => {
     } catch (error) {
         console.error(`Error starting scanner for ${thermostatIp}:`, error);
     }
-  }, [authenticatedApiFetch]);
+  };
 
   // Stop scanner
-  const stopScanner = useCallback(async (thermostatIp, hostname) => {
+  const stopScanner = async (thermostatIp, hostname) => {
     try {
         const response = await authenticatedApiFetch(
             `${hostname}/scanner/stop/${thermostatIp}`,
@@ -772,10 +772,10 @@ export const ThermostatProvider = ({ children }) => {
     } catch (error) {
         console.error(`Error stopping scanner for ${thermostatIp}:`, error);
     }
-  }, [authenticatedApiFetch]);
+  };
 
   // Restart scanner
-  const restartScanner = useCallback(async (thermostatIp, hostname, interval = 60000) => {
+  const restartScanner = async (thermostatIp, hostname, interval = 60000) => {
     try {
         const response = await authenticatedApiFetch(
             `${hostname}/scanner/restart/${thermostatIp}`,
@@ -788,10 +788,10 @@ export const ThermostatProvider = ({ children }) => {
     } catch (error) {
         console.error(`Error restarting scanner for ${thermostatIp}:`, error);
     }
-  }, [authenticatedApiFetch]);
+  };
 
   // Get scanner status
-  const getScannerStatus = useCallback(async (thermostatIp, hostname) => {
+  const getScannerStatus = async (thermostatIp, hostname) => {
     try {
         const response = await authenticatedApiFetch(
             `${hostname}/scanner/status?ip=${thermostatIp}`,
@@ -806,10 +806,10 @@ export const ThermostatProvider = ({ children }) => {
     } catch (error) {
         console.error("Error fetching scanner status:", error);
     }
-  }, [authenticatedApiFetch]);
+  };
 
   // Fetch scanned data
-  const fetchScannedData = useCallback(async (thermostatIp, hostname) => {
+  const fetchScannedData = async (thermostatIp, hostname) => {
     try {
         const response = await authenticatedApiFetch(
             `${hostname}/scanner/data/${thermostatIp}`,
@@ -832,11 +832,11 @@ export const ThermostatProvider = ({ children }) => {
         console.error(`Error fetching scanned data for ${thermostatIp}:`, error);
         return [];
     }    
-  }, [authenticatedApiFetch, token]);
+  };
 
   // Schedule management functions
   // Fetch schedule for a thermostat
-  const getSchedule = useCallback(async (thermostatIp, hostname, mode) => {
+  const getSchedule = async (thermostatIp, hostname, mode) => {
     try {
         const response = await authenticatedApiFetch(
             `${hostname}/schedule/${mode}/${thermostatIp}`,
@@ -850,10 +850,10 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error fetching schedule:", error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
   // Update a new schedule entry
-  const updateSchedule = useCallback(async (thermostatIp, hostname, mode, scheduleEntry) => {
+  const updateSchedule = async (thermostatIp, hostname, mode, scheduleEntry) => {
     try {
         const response = await authenticatedApiFetch(`${hostname}/schedule/${mode}/${thermostatIp}`,
             "POST",
@@ -867,11 +867,11 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error adding schedule:", error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
   // Cloud management functions
   // Fetch cloud settings for a thermostat
-  const getCloudSettings = useCallback(async (thermostatIp, hostname) => {
+  const getCloudSettings = async (thermostatIp, hostname) => {
     try {
         const response = await authenticatedApiFetch(
             `${hostname}/cloud/${thermostatIp}`,
@@ -885,10 +885,10 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error fetching cloud settings:", error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
   // Update a new cloud settings
-  const updateCloudSettings = useCallback(async (thermostatIp, hostname, settings) => {
+  const updateCloudSettings = async (thermostatIp, hostname, settings) => {
     try {
         const response = await authenticatedApiFetch(`${hostname}/cloud/${thermostatIp}`,
             "POST",
@@ -902,9 +902,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error updating cloud settings:", error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
-  const getThermostats = useCallback(async (hostname) => {
+  const getThermostats = async (hostname) => {
     /* fetch from DB or API */
     try {
         const response = await authenticatedApiFetch(
@@ -921,9 +921,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error fetching thermostats:", error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
   
-  const addThermostat = useCallback(async (hostname, thermostat) => {
+  const addThermostat = async (hostname, thermostat) => {
     try {
         const response = await authenticatedApiFetch(`${hostname}/thermostats`,
             "POST",
@@ -937,9 +937,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error adding thermostat:", error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
-  const updateThermostat = useCallback(async (hostname, thermostat) => {
+  const updateThermostat = async (hostname, thermostat) => {
     try {
         const response = await authenticatedApiFetch(`${hostname}/thermostats/${thermostat.thermostatInfo.ip}`,
             "PUT",
@@ -953,9 +953,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error updating thermostat:", error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
-  const disableThermostat = useCallback(async (hostname, thermostat) => {
+  const disableThermostat = async (hostname, thermostat) => {
     try {
         const response = await authenticatedApiFetch(`${hostname}/thermostats/${thermostat.thermostatInfo.ip}`,
             "DELETE",
@@ -969,9 +969,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error disabling thermostat:", error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
-  const scanForThermostats = useCallback(async (hostname, subnet) => {
+  const scanForThermostats = async (hostname, subnet) => {
     /* scan, query, add all found */
     try {
         const response = await authenticatedApiFetch(
@@ -987,9 +987,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error("Error fetching scan results:", error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
-  const getDailyRuntime = useCallback(async (thermostatIp, hostname, days = -1) => {
+  const getDailyRuntime = async (thermostatIp, hostname, days = -1) => {
     /* Fetch daily runtime data */ 
     try {
         const response = await authenticatedApiFetch(
@@ -1006,9 +1006,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error(`Error fetching daily runtime data: ${thermostatIp}`, error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
   
-  const getHourlyRuntime = useCallback(async (thermostatIp, hostname, hours = -1) => {
+  const getHourlyRuntime = async (thermostatIp, hostname, hours = -1) => {
     /* Fetch hourly runtime data */ 
     try {
         const response = await authenticatedApiFetch(
@@ -1025,9 +1025,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error(`Error fetching hourly runtime data: ${thermostatIp}`, error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
   
-  const getHourlyEnv = useCallback(async (thermostatIp, hostname, hours = -1) => {
+  const getHourlyEnv = async (thermostatIp, hostname, hours = -1) => {
     /* Fetch hourly environment data */ 
     try {
         const response = await authenticatedApiFetch(
@@ -1044,9 +1044,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error(`Error fetching hourly env data: ${thermostatIp}`, error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
-  const getTempVsRuntime = useCallback(async (thermostatIp, hostname) => {
+  const getTempVsRuntime = async (thermostatIp, hostname) => {
     /* Fetch temperature vs runtime data */
     try {
         const response = await authenticatedApiFetch(
@@ -1063,9 +1063,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error(`Error fetching temperature vs runtime data: ${thermostatIp}`, error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
-  const getDailyModeRuntime = useCallback(async (thermostatIp, hostname, days = -1) => {
+  const getDailyModeRuntime = async (thermostatIp, hostname, days = -1) => {
     /* Fetch daily mode runtime data */
     try {
         const response = await authenticatedApiFetch(
@@ -1082,9 +1082,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error(`Error fetching daily mode runtime data: ${thermostatIp}`, error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
-  const getFanVsHvacDaily = useCallback(async (thermostatIp, hostname, days = -1) => {
+  const getFanVsHvacDaily = async (thermostatIp, hostname, days = -1) => {
     /* Fetch fan vs hvac daily data */
     try {
         const response = await authenticatedApiFetch(
@@ -1101,9 +1101,9 @@ export const ThermostatProvider = ({ children }) => {
         console.error(`Error fetching fan vs hvac daily data: ${thermostatIp}`, error);
         throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
-  const getDailyCycles = useCallback(async (thermostatIp, hostname, days = -1) => {
+  const getDailyCycles = async (thermostatIp, hostname, days = -1) => {
     /* Fetch daily cycles data */
     try {
       const response = await authenticatedApiFetch(
@@ -1120,9 +1120,9 @@ export const ThermostatProvider = ({ children }) => {
       console.error(`Error fetching daily cycles data: ${thermostatIp}`, error);
       throw error;
     }
-  }, [authenticatedApiFetch]);
+  };
 
-  const getHourlyCycles = useCallback(async (thermostatIp, hostname, hours = -1) => {
+  const getHourlyCycles = async (thermostatIp, hostname, hours = -1) => {
     /* Fetch hourly cycles data */
     try {
       const response = await authenticatedApiFetch(
@@ -1139,25 +1139,7 @@ export const ThermostatProvider = ({ children }) => {
         console.error(`Error fetching hourly cycles data: ${thermostatIp}`, error);
         throw error;
       }
-  }, [authenticatedApiFetch]);
-
-  const getEnergyUsage = useCallback(async (thermostatIp, hostname) => {
-    try {
-        const response = await authenticatedApiFetch(
-            `${hostname}/energy/usage/${thermostatIp}`,
-            "GET",
-            null,
-            `Error fetching consumption report: ${thermostatIp}`,
-            `Fetching consumption report: ${thermostatIp}...`
-        );
-        console.log(`Fetched consumption report: ${thermostatIp}`, response);
-        return response;
-    } catch (error) {
-        console.log(`Error fetching consumption report: ${thermostatIp}`, error);
-        console.error(`Error fetching consumption report: ${thermostatIp}`, error);
-        throw error;
-    }
-  }, [authenticatedApiFetch]);
+  };
 
   return (
     <ThermostatContext.Provider
@@ -1209,7 +1191,6 @@ export const ThermostatProvider = ({ children }) => {
             getFanVsHvacDaily,
             getDailyCycles,
             getHourlyCycles,
-            getEnergyUsage,
         }}
     >
         {children}

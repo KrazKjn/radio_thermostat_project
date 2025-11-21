@@ -8,11 +8,10 @@ const { convertToTwoDecimalFloat, formatTimestamp } = require('../utils/utils');
 const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
 const { HVAC_FAN_STATE_OFF, HVAC_FAN_STATE_ON } = require('../../constants/hvac_fan');
 const { HVAC_SCAN_CLOUD } = require('../../constants/hvac_scan');
-const { ENERGY_TYPES } = require('../../constants/energy');
 const crypto = require('../utils/crypto');
 const Logger = require('../../components/Logger');
+const cache = require('../utils/cache');
 
-const cache = {};
 const CACHE_LIMIT = 120; // Limit cache size to 120 entries
 const CACHE_EXPIRATION = 15000; // 15 seconds
 const DEFAULT_SCAN_INTERVAL = 60000; // Scan every 15 seconds
@@ -24,85 +23,42 @@ const SEGMENT_INTERVAL_MS = 60000; // 1 minute or whatever cadence you prefer
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const MAX_CYCLE_RUNTIME_MINUTES = 120.0; // 2 hours
 const MIN_CYCLE_RUNTIME_MINUTES = 2.0; // 2 minutes
-const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000; // 14 days in milliseconds
 
 const getThermostatData = async (req, res) => {
-    let ip = undefined;
-    const debugLevel = Number.isFinite(Number(req.query?.debugLevel)) ? Number(req.query.debugLevel) : 6;
+    const { ip } = req.params;
+    const noCache = req.query.noCache === "true";
+    const cacheKey = `thermostat_state_${ip}`;
+
     try {
-        Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostatData', debugLevel);
-        ip = req.params.ip;
-        const currentTime = Date.now();
-        const noCache = req.query.noCache === "true"; // Check for cache override
-        let expiredData = false;
-
-        cache[ip] = cache[ip] || { values: [] };
-        if (typeof cache[ip].lastUpdated === "number") {
-            expiredData = currentTime - cache[ip].lastUpdated < CACHE_EXPIRATION;
-        }
-        if (cache[ip].source !== 'cloud') {
-            expiredData = currentTime - cache[ip].lastUpdated < (DEFAULT_SCAN_INTERVAL + CACHE_EXPIRATION);
-        }
-        // Use cached data if it's recent and cache override is NOT requested
-        if (!noCache &&
-            cache[ip]?.values?.length &&
-            expiredData) {
-            Logger.info(`[Thermostat] Returning cached data for IP ${ip}`, 'ThermostatController', 'getThermostatData');
-            if (cache[ip].values[0].humidity === undefined || cache[ip].values[0].humidity === null) {
-                const data = db.prepare(`
-                    SELECT timestamp, humidity FROM thermostat_readings WHERE ip = ? AND humidity IS NOT NULL ORDER BY timestamp DESC LIMIT 1;
-                `).all(ip);
-                if (data && data.length > 0) {
-                    cache[ip].values[0].humidity = data[0].humidity;
-                }
+        if (!noCache) {
+            const cachedData = cache.get(cacheKey);
+            if (cachedData) {
+                Logger.debug(`[Thermostat] Returning cached state for IP ${ip}`, 'ThermostatController', 'getThermostatData');
+                return res.json(cachedData);
             }
-            return res.json(cache[ip].values[0]); // Return the most recent cached value
         }
-        Logger.debug(`[Thermostat] Fetching new data for IP ${ip}`, 'ThermostatController', 'getThermostatData', debugLevel);
-        const lastUpdated = cache[ip]?.lastUpdated;
-        const lastUpdatedDate = lastUpdated ? new Date(lastUpdated) : null;
-        const timeSinceLastUpdate = lastUpdated ? currentTime - lastUpdated : null;
 
-        Logger.debug(
-            `[Thermostat] noCache: ${noCache}, cache exists: ${!!cache[ip]}, cache length: ${cache[ip]?.values?.length}, ` +
-            `lastUpdated: ${lastUpdatedDate?.toString() ?? 'N/A'}, currentTime: ${new Date(currentTime).toString()}, ` +
-            `time since last update: ${timeSinceLastUpdate !== null ? timeSinceLastUpdate + 'ms' : 'N/A'}`,
-            'ThermostatController',
-            'getThermostatData',
-            debugLevel
-        );        
+        Logger.debug(`[Thermostat] Fetching new state data for IP ${ip}`, 'ThermostatController', 'getThermostatData');
 
-        // Fetch new data
         const response = await fetch(`http://${ip}/tstat`);
         const data = await response.json();
 
         if (data.humidity === undefined || data.humidity === null) {
-            const data2 = db.prepare(`
-                SELECT timestamp, humidity FROM thermostat_readings WHERE ip = ? AND humidity IS NOT NULL ORDER BY timestamp DESC LIMIT 1;
-            `).all(ip);
-            if (data2 && data2.length > 0) {
-                data.humidity = data2[0].humidity;
+            const humidityData = db.prepare(`
+                SELECT humidity FROM thermostat_readings WHERE ip = ? AND humidity IS NOT NULL ORDER BY timestamp DESC LIMIT 1;
+            `).get(ip);
+            if (humidityData) {
+                data.humidity = humidityData.humidity;
             }
         }
 
-        // Update cache
-        cache[ip] = cache[ip] || { values: [] };
-        if (cache[ip].source !== 'cloud') {
-            Logger.debug(`[Thermostat] Updating cached data for IP ${ip}`, 'ThermostatController', 'getThermostatData', debugLevel);
-            const [ scanInterval, scanMode ] = getThermostatScanMode(ip);
-            data.scanMode = scanMode;
-            data.scanInterval = scanInterval;
-            const updatedData = { timestamp: currentTime, ...data }
-            cache[ip].values.unshift(updatedData); // Add new value to the start
-            cache[ip].lastUpdated = currentTime;
+        const [scanInterval, scanMode] = getThermostatScanMode(ip);
+        data.scanMode = scanMode;
+        data.scanInterval = scanInterval;
 
-            // Limit cache size
-            if (cache[ip].values.length > CACHE_LIMIT) {
-                cache[ip].values.pop(); // Remove oldest value
-            }
-        }
+        cache.set(cacheKey, data, cache.TTL.CURRENT_STATE);
+        Logger.debug(`[Thermostat] State data for IP ${ip} cached.`, 'ThermostatController', 'getThermostatData');
 
-        Logger.debug(`Received GET response: ${req.url}: ${Logger.formatJSON(data)}`, 'ThermostatController', 'getThermostatData', debugLevel);
         res.json(data);
     } catch (error) {
         Logger.error(`[Thermostat] Error fetching data for IP ${ip}: ${error.message}`, 'ThermostatController', 'getThermostatData');
@@ -235,16 +191,26 @@ const getSwing = async (req, res) => {
 };
 
 const getThermostat = async (req, res) => {
-    let ip = undefined;
+    const { ip } = req.params;
+    const cacheKey = `thermostat_info_${ip}`;
+
     try {
+        const cachedData = cache.get(cacheKey);
+        if (cachedData) {
+            Logger.debug(`[Thermostat] Returning cached device info for IP ${ip}`, 'ThermostatController', 'getThermostat');
+            return res.json(cachedData);
+        }
+
         Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostat', 1);
-        ip = req.params.ip;
+
         const endpoints = {
             model: `http://${ip}/tstat/model`,
             name: `http://${ip}/sys/name`,
         };
-        let combinedData = {};
-        Logger.debug(`Invoking:  ${ JSON.stringify(endpoints, null, 2)}`, 'ThermostatController', 'getThermostat', 2);
+
+        Logger.debug(`Invoking:  ${JSON.stringify(endpoints, null, 2)}`, 'ThermostatController', 'getThermostat', 2);
+
+        let combinedData;
         if (ip.includes("192.168.100")) {
             combinedData = {
                 ip: "192.168.100.10",
@@ -252,19 +218,21 @@ const getThermostat = async (req, res) => {
                 name: "Test Location",
             };
         } else {
-            // Fetch data from both endpoints in parallel
             const [modelResponse, nameResponse] = await Promise.all([
                 fetch(endpoints.model).then(res => res.json()),
                 fetch(endpoints.name).then(res => res.json()),
             ]);
             
-            // Consolidate into a single JSON object
             combinedData = {
                 ip,
                 model: modelResponse.model,
                 name: nameResponse.name,
             };
         }
+
+        cache.set(cacheKey, combinedData, cache.TTL.DEVICE_INFO);
+        Logger.debug(`[Thermostat] Device info for IP ${ip} cached.`, 'ThermostatController', 'getThermostat');
+
         res.json(combinedData);
     } catch (error) {
         Logger.error(`[Thermostat] Error fetching data for IP ${ip}: ${error.message}`, 'ThermostatController', 'getThermostat');
@@ -273,18 +241,28 @@ const getThermostat = async (req, res) => {
 };
 
 const getThermostatDetailed = async (req, res) => {
-    let ip = undefined;
+    const { ip } = req.params;
+    const cacheKey = `thermostat_detailed_info_${ip}`;
+
     try {
+        const cachedData = cache.get(cacheKey);
+        if (cachedData) {
+            Logger.debug(`[Thermostat] Returning cached detailed device info for IP ${ip}`, 'ThermostatController', 'getThermostatDetailed');
+            return res.json(cachedData);
+        }
+
         Logger.debug(`Received GET request: ${req.url}`, 'ThermostatController', 'getThermostatDetailed', 1);
-        ip = req.params.ip;
+
         const endpoints = {
             model: `http://${ip}/tstat/model`,
             name: `http://${ip}/sys/name`,
             sys: `http://${ip}/sys`,
             cloud: `http://${ip}/cloud`,
         };
-        let combinedData = {};
-        Logger.debug(`Invoking: ${ JSON.stringify(endpoints, null, 2) }`, 'ThermostatController', 'getThermostatDetailed', 2);
+
+        Logger.debug(`Invoking: ${JSON.stringify(endpoints, null, 2)}`, 'ThermostatController', 'getThermostatDetailed', 2);
+
+        let combinedData;
         if (ip.includes("192.168.100")) {
             combinedData = {
                 id: null,
@@ -295,15 +273,13 @@ const getThermostatDetailed = async (req, res) => {
                 cloud: {"interval":60,"url":"http://192.168.0.101:3000/captureStatIn","status":2,"enabled":0,"authkey":"beaa4c96","status_code":200}
             };
         } else {
-            // Fetch data from both endpoints in parallel
-            const [modelResponse, nameResponse] = await Promise.all([
+            const [modelResponse, nameResponse, sysResponse, cloudResponse] = await Promise.all([
                 fetch(endpoints.model).then(res => res.json()),
                 fetch(endpoints.name).then(res => res.json()),
                 fetch(endpoints.sys).then(res => res.json()),
                 fetch(endpoints.cloud).then(res => res.json()),
             ]);
             
-            // Consolidate into a single JSON object
             combinedData = {
                 id: getIdByIP(ip),
                 ip,
@@ -313,6 +289,10 @@ const getThermostatDetailed = async (req, res) => {
                 cloud: cloudResponse
             };
         }
+
+        cache.set(cacheKey, combinedData, cache.TTL.DEVICE_INFO);
+        Logger.debug(`[Thermostat] Detailed device info for IP ${ip} cached.`, 'ThermostatController', 'getThermostatDetailed');
+
         res.json(combinedData);
     } catch (error) {
         Logger.error(`[Thermostat] Error fetching data for IP ${ip}: ${error.message}`, 'ThermostatController', 'getThermostatDetailed');
@@ -1022,10 +1002,10 @@ const processCycleQueue = async () => {
       Logger.info(
         `Segmented ${unsegmentedTstate.length} HVAC and ${unsegmentedFstate.length} fan cycles`,
         'ThermostatController',
-        'processCycleQueue'
+        'captureStatIn'
       );
     } catch (err) {
-      Logger.error(`Error segmenting cycles: ${err.message}`, 'ThermostatController', 'processCycleQueue');
+      Logger.error(`Error segmenting cycles: ${err.message}`, 'ThermostatController', 'captureStatIn');
     }
   }
 };
@@ -1267,7 +1247,7 @@ const verifyCycles = (update = false) => {
 
   let whereClause = '';
   if (lastRunData && lastRunData.timestamp) {
-    whereClause = `WHERE timestamp >= ${lastRunData.timestamp - TWO_WEEKS_MS}`;
+    whereClause = `WHERE timestamp >= ${lastRunData.timestamp - 60000}`; // 1 minute buffer
     Logger.info(`verifyCycles: processing scan_data since last run at ${lastRunData.formatted}`, 'ThermostatController', 'verifyCycles');
   }
   // Proceed with cycle verification
@@ -1416,7 +1396,7 @@ const captureStatIn = async (req, res) => {
                     jsonData.tstat.tmode,
                     jsonData.tstat.tmode === HVAC_MODE_COOL ? jsonData.tstat.t_cool : jsonData.tstat.tmode === HVAC_MODE_HEAT ? jsonData.tstat.t_heat : null,
                     jsonData.tstat.tstate,
-                    jsonData.tstat.fstate === HVAC_FAN_STATE_OFF && jsonData.tstat.tstate === HVAC_MODE_HEAT ? HVAC_FAN_STATE_ON : jsonData.tstat.fstate
+                    jsonData.tstat.fstate === HVAC_FAN_STATE_OFF && jsonData.tstat.tstate === HVAC_MODE_HEAT ? HVAC_FAN_STATE_ON : HVAC_FAN_STATE_OFF
                 );
                 Logger.info(`Thermostat data saved: ${location}`, 'ThermostatController', 'captureStatIn');
                 if (!cache[ip]) {
@@ -1498,118 +1478,74 @@ const captureStatIn = async (req, res) => {
     }
 };
 
-const getEnergyCost = (heat_source_id, date) => {
-    const row = db.prepare(`
-        SELECT cost_per_unit FROM energy_costing
-        WHERE energy_type_id = ? AND effective_start_date <= ?
-        ORDER BY effective_start_date DESC
-        LIMIT 1
-    `).get(heat_source_id, date);
-    return row ? row.cost_per_unit : null;
-};
-
 const getDailyRuntime = (req, res) => {
-  try {
     const { ip } = req.params;
     const { days } = req.query;
-    const thermostat = db.prepare(`
-        SELECT t.id, c.heat_source_id
-        FROM thermostats t
-        JOIN thermostat_compressor tc ON t.id = tc.thermostat_id
-        JOIN compressors c ON tc.compressor_id = c.id
-        WHERE t.ip = ?
-    `).get(ip);
+    const cacheKey = `daily_runtime_${ip}_${days || 'all'}`;
 
-    if (!thermostat) {
-      return res.status(404).json({ error: "Thermostat not found" });
-    }
+    try {
+        const cachedData = cache.get(cacheKey);
+        if (cachedData) {
+            Logger.debug(`[Analytics] Returning cached daily runtime for IP ${ip}`, 'ThermostatController', 'getDailyRuntime');
+            return res.json(cachedData);
+        }
 
-    const hasLimit = days && Number(days) > 0;
-    const limitWhere = hasLimit ? `AND start_timestamp >= (strftime('%s', 'now', '-${Number(days)} days') * 1000)` : ``;
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        if (!thermostat) {
+            return res.status(404).json({ error: "Thermostat not found" });
+        }
 
-    const query = `
-        SELECT * FROM (
-            SELECT 
-                run_date,
-                tmode,
-                SUM(run_time) AS total_runtime_minutes,
-                AVG(avg_indoor_temp) AS avg_indoor_temp,
-                AVG(avg_outdoor_temp) AS avg_outdoor_temp,
-                AVG(avg_indoor_humidity) AS avg_indoor_humidity,
-                AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
-            FROM view_tstate_cycles
-            WHERE thermostat_id = ?
-                ${limitWhere}
-            GROUP BY run_date, tmode
-            ORDER BY run_date ASC, tmode
-        )
+        const hasLimit = days && Number(days) > 0;
+        const limitWhere = hasLimit ? `AND start_timestamp >= (strftime('%s', 'now', '-${Number(days)} days') * 1000)` : ``;
 
-        UNION ALL
+        const query = `
+            SELECT * FROM (
+                SELECT
+                    run_date, tmode, SUM(run_time) AS total_runtime_minutes,
+                    AVG(avg_indoor_temp) AS avg_indoor_temp, AVG(avg_outdoor_temp) AS avg_outdoor_temp,
+                    AVG(avg_indoor_humidity) AS avg_indoor_humidity, AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
+                FROM view_tstate_cycles
+                WHERE thermostat_id = ? ${limitWhere}
+                GROUP BY run_date, tmode
+            )
+            UNION ALL
+            SELECT * FROM (
+                SELECT
+                    run_date, 0 AS tmode, SUM(run_time) AS total_runtime_minutes,
+                    AVG(avg_indoor_temp) AS avg_indoor_temp, AVG(avg_outdoor_temp) AS avg_outdoor_temp,
+                    AVG(avg_indoor_humidity) AS avg_indoor_humidity, AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
+                FROM view_fstate_cycles
+                WHERE thermostat_id = ? ${limitWhere}
+                GROUP BY run_date
+            )
+            ORDER BY run_date DESC, tmode;
+        `;
 
-        SELECT * FROM (
-            SELECT 
-                run_date,
-                0 AS tmode,
-                SUM(run_time) AS total_runtime_minutes,
-                AVG(avg_indoor_temp) AS avg_indoor_temp,
-                AVG(avg_outdoor_temp) AS avg_outdoor_temp,
-                AVG(avg_indoor_humidity) AS avg_indoor_humidity,
-                AVG(avg_outdoor_humidity) AS avg_outdoor_humidity
-            FROM view_fstate_cycles
-            WHERE thermostat_id = ?
-                ${limitWhere}
-            GROUP BY run_date, tmode
-            ORDER BY run_date ASC, tmode
-        );
-    `;
+        const rows = db.prepare(query).all(thermostat.id, thermostat.id);
+        const grouped = new Map();
 
-    const rows = db.prepare(query).all(thermostat.id, thermostat.id);
-
-    // --- Transform rows into { run_date, HVAC, FAN } format ---
-    const grouped = new Map();
-
-    for (const row of rows) {
-        const { run_date, tmode, ...rest } = row;
-        if (!grouped.has(run_date)) {
-            let cost = null;
-            let fan_cost = null;
-            if (tmode === HVAC_MODE_COOL) { // Cooling
-                cost = getEnergyCost(ENERGY_TYPES.ELECTRICITY, new Date(run_date).getTime());
-            } else if (tmode === HVAC_MODE_HEAT) { // Heating
-                cost = getEnergyCost(thermostat.heat_source_id, new Date(run_date).getTime());
-            } else if (tmode === 0) { // Circulation
-                fan_cost = getEnergyCost(ENERGY_TYPES.ELECTRICITY, new Date(run_date).getTime());
+        for (const row of rows) {
+            const { run_date, tmode, ...rest } = row;
+            if (!grouped.has(run_date)) {
+                grouped.set(run_date, { run_date });
             }
-            grouped.set(run_date, { run_date, cost, fan_cost });
+            const entry = grouped.get(run_date);
+            if (tmode === 0) {
+                entry.FAN = { tmode, ...rest };
+            } else {
+                entry.HVAC = { tmode, ...rest };
+            }
         }
 
-        const entry = grouped.get(run_date);
-        if (tmode === 0) {
-            entry.FAN = { tmode, ...rest };
-        } else {
-            entry.HVAC = { tmode, ...rest };
-        }
+        const result = Array.from(grouped.values()).reverse();
+        cache.set(cacheKey, result, cache.TTL.ANALYTICS_SHORT);
+        Logger.debug(`[Analytics] Daily runtime for IP ${ip} cached.`, 'ThermostatController', 'getDailyRuntime');
+
+        res.json(result);
+    } catch (error) {
+        Logger.error(`Error in getDailyRuntime: ${error.message}`, 'ThermostatController', 'getDailyRuntime');
+        res.status(500).json({ error: 'Failed to retrieve daily runtime data' });
     }
-
-    // Ensure every entry has a FAN record
-    for (const entry of grouped.values()) {
-        if (!entry.FAN) {
-            entry.FAN = {
-                tmode: 0,
-                total_runtime_minutes: 0,
-                avg_indoor_temp: 0,
-                avg_outdoor_temp: 0,
-                avg_indoor_humidity: 0,
-                avg_outdoor_humidity: 0
-            };
-        }
-    }
-
-    res.json(Array.from(grouped.values()));
-  } catch (error) {
-    Logger.error(`Error in getDailyRuntime: ${error.message}`, 'ThermostatController', 'getDailyRuntime');
-    res.status(500).json({ error: 'Failed to retrieve daily runtime data' });
-  }
 };
 
 const getDailyModeRuntime = (req, res) => {
@@ -1647,7 +1583,7 @@ const getDailyModeRuntime = (req, res) => {
           SELECT * FROM view_tstate_cycles
           WHERE thermostat_id = ?
             ${limitWhere}
-          ORDER BY start_timestamp ASC
+          ORDER BY start_timestamp DESC
         )
 
         UNION ALL
@@ -1664,15 +1600,16 @@ const getDailyModeRuntime = (req, res) => {
           SELECT * FROM view_fstate_cycles
           WHERE thermostat_id = ?
             ${limitWhere}
-          ORDER BY start_timestamp ASC
+          ORDER BY start_timestamp DESC
         )
       )
       GROUP BY run_date, tmode
-      ORDER BY run_date ASC, tmode;
+      ORDER BY run_date DESC, tmode;
     `;
 
     const rows = db.prepare(query).all(thermostat.id, thermostat.id);
 
+    //res.json(rows.reverse());
     // --- Transform rows into { run_date, HVAC, FAN } format ---
     const grouped = new Map();
 
@@ -1690,21 +1627,7 @@ const getDailyModeRuntime = (req, res) => {
         }
     }
 
-    // Ensure every entry has a FAN record
-    for (const entry of grouped.values()) {
-        if (!entry.FAN) {
-            entry.FAN = {
-                tmode: 0,
-                total_runtime_minutes: 0,
-                avg_indoor_temp: 0,
-                avg_outdoor_temp: 0,
-                avg_indoor_humidity: 0,
-                avg_outdoor_humidity: 0
-            };
-        }
-    }
-
-    res.json(Array.from(grouped.values()));
+    res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error: ${error.message}`, 'ThermostatController', 'getDailyModeRuntime');
     res.status(500).json({ error: 'Failed to retrieve daily mode runtime data' });
@@ -1712,60 +1635,40 @@ const getDailyModeRuntime = (req, res) => {
 };
 
 const getHourlyRuntime = (req, res) => {
-    try {
-        const { ip } = req.params;
-        const { hours } = req.query;
+    const { ip } = req.params;
+    const { hours } = req.query;
+    const cacheKey = `hourly_runtime_${ip}_${hours || 'all'}`;
 
-        const thermostat = db.prepare(`
-            SELECT t.id, c.heat_source_id
-            FROM thermostats t
-            JOIN thermostat_compressor tc ON t.id = tc.thermostat_id
-            JOIN compressors c ON tc.compressor_id = c.id
-            WHERE t.ip = ?
-        `).get(ip);
+    try {
+        const cachedData = cache.get(cacheKey);
+        if (cachedData) {
+            Logger.debug(`[Analytics] Returning cached hourly runtime for IP ${ip}`, 'ThermostatController', 'getHourlyRuntime');
+            return res.json(cachedData);
+        }
+
+        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
         if (!thermostat) {
             return res.status(404).json({ error: "Thermostat not found" });
         }
 
-        const now = new Date();
-        let whereClause = '';
-        let whereSegmentHour = '';
-        if (hours && Number(hours) > 0) {
-            const dt = new Date(now);
-            dt.setHours(now.getHours() - Number(hours));
-            dt.setMinutes(0, 0, 0); // Round to start of hour
-
-            whereSegmentHour = dt.toISOString().slice(0, 19).replace('T', ' ');
-            whereClause = (hours && Number(hours) > 0) ? `AND segment_hour >= ?` : ``;
-        }
+        const limitClause = (hours && Number(hours) > 0) ? `LIMIT ${Number(hours)}` : ``;
         const query = `
-            SELECT segment_hour,
-                tmode,
-                total_runtime_minutes,
-                avg_indoor_temp,
-                avg_outdoor_temp,
-                avg_indoor_humidity,
-                avg_outdoor_humidity
+            SELECT segment_hour, tmode, total_runtime_minutes, avg_indoor_temp, avg_outdoor_temp, avg_indoor_humidity, avg_outdoor_humidity
             FROM view_cycle_hourly_runtime
             WHERE thermostat_id = ?
-            ${whereClause}
-            ORDER BY segment_hour ASC
+            ORDER BY segment_hour DESC
+            ${limitClause};
         `;
     
-        const rows = (whereClause)
-            ? db.prepare(query).all(thermostat.id, whereSegmentHour)
-            : db.prepare(query).all(thermostat.id);
-
+        const rows = db.prepare(query).all(thermostat.id);
+        const now = new Date();
         const expectedHours = [];
-
         for (let i = Number(hours) - 1; i >= 0; i--) {
             const dt = new Date(now.getTime() - i * 3600000);
-            dt.setMinutes(0, 0, 0); // Round to start of hour
-            const formatted = dt.toISOString().slice(0, 19).replace('T', ' ');
-            expectedHours.push(formatted);
+            dt.setMinutes(0, 0, 0);
+            expectedHours.push(dt.toISOString().slice(0, 19).replace('T', ' '));
         }
 
-        // Step 1: Group rows by segment_hour and tmode
         const groupedMap = new Map();
         for (const row of rows) {
             const hour = row.segment_hour;
@@ -1776,63 +1679,20 @@ const getHourlyRuntime = (req, res) => {
             groupedMap.get(hour)[type] = row;
         }
 
-        // Ensure every entry has a FAN record
-        for (const entry of groupedMap.values()) {
-            if (!entry.FAN) {
-                entry.FAN = {
-                    tmode: 0,
-                    total_runtime_minutes: 0,
-                    avg_indoor_temp: 0,
-                    avg_outdoor_temp: 0,
-                    avg_indoor_humidity: 0,
-                    avg_outdoor_humidity: 0
-                };
-            }
-        }
-
-        // Step 2: Fill expected hours with HVAC and FAN rows or defaults
         const filledRows = expectedHours.map(hour => {
             const group = groupedMap.get(hour) || {};
-            let cost = null;
-            let fanCost = null;
-            if (group.HVAC) {
-                if (group.HVAC.tmode === HVAC_MODE_COOL) { // Cooling
-                    cost = getEnergyCost(ENERGY_TYPES.ELECTRICITY, new Date(hour).getTime());
-                } else if (group.HVAC.tmode === HVAC_MODE_HEAT) { // Heating
-                    cost = getEnergyCost(thermostat.heat_source_id, new Date(hour).getTime());
-                }
-            }
-            if (group.FAN) {
-                fanCost = getEnergyCost(ENERGY_TYPES.ELECTRICITY, new Date(hour).getTime());
-            }
-            const defaultRow = {
-                segment_hour: hour,
-                total_runtime_minutes: 0,
-                avg_indoor_temp: null,
-                avg_outdoor_temp: null,
-                avg_indoor_humidity: null,
-                avg_outdoor_humidity: null
-            };
-
+            const defaultRow = { segment_hour: hour, total_runtime_minutes: 0, avg_indoor_temp: null, avg_outdoor_temp: null, avg_indoor_humidity: null, avg_outdoor_humidity: null };
             return {
                 segment_hour: hour,
-                cost: cost,
-                fan_cost: fanCost,
-                HVAC: group.HVAC ? {
-                    ...defaultRow,
-                    ...group.HVAC,
-                    tmode: group.HVAC.tmode
-                } : { ...defaultRow, tmode: null },
-                FAN: group.FAN ? {
-                    ...defaultRow,
-                    ...group.FAN,
-                    tmode: group.FAN.tmode
-                } : { ...defaultRow, tmode: null }
+                HVAC: group.HVAC ? { ...defaultRow, ...group.HVAC } : { ...defaultRow, tmode: null },
+                FAN: group.FAN ? { ...defaultRow, ...group.FAN } : { ...defaultRow, tmode: null }
             };
         });
 
-        const filteredRows = filledRows.filter(row => row.cost !== null || row.fan_cost !== null);
-        res.json(filteredRows);
+        cache.set(cacheKey, filledRows, cache.TTL.ANALYTICS_SHORT);
+        Logger.debug(`[Analytics] Hourly runtime for IP ${ip} cached.`, 'ThermostatController', 'getHourlyRuntime');
+
+        res.json(filledRows);
     } catch (error) {
         Logger.error(`Error: ${error.message}`, 'ThermostatController', 'getHourlyRuntime');
         res.status(500).json({ error: 'Failed to retrieve hourly environment data' });
@@ -1931,12 +1791,12 @@ const getFanVsHvacDaily = (req, res) => {
                     ${limitWhere}
                 GROUP BY run_date
             ) f ON t.run_date = f.run_date
-            ORDER BY t.run_date ASC;
+            ORDER BY t.run_date DESC;
         `;
 
         const rows = db.prepare(query).all(thermostat.id, thermostat.id);
 
-        res.json(rows);
+        res.json(rows.reverse());
     } catch (error) {
         Logger.error(`Error in getFanVsHvacDaily: ${error.message}`, 'ThermostatController', 'getFanVsHvacDaily');
         res.status(500).json({ error: 'Failed to retrieve fan vs hvac daily data' });
@@ -1992,7 +1852,7 @@ const getDailyCycles = (req, res) => {
           SELECT * FROM view_tstate_cycles
           WHERE thermostat_id = ?
             ${limitWhere}
-          ORDER BY start_timestamp ASC
+          ORDER BY start_timestamp DESC
         )
 
         UNION ALL
@@ -2009,11 +1869,11 @@ const getDailyCycles = (req, res) => {
           SELECT * FROM view_fstate_cycles
           WHERE thermostat_id = ?
             ${limitWhere}
-          ORDER BY start_timestamp ASC
+          ORDER BY start_timestamp DESC
         )
       )
       GROUP BY run_date, tmode
-      ORDER BY run_date ASC, tmode;
+      ORDER BY run_date DESC, tmode;
     `;
 
     const rows = db.prepare(query).all(thermostat.id, thermostat.id);
@@ -2035,22 +1895,7 @@ const getDailyCycles = (req, res) => {
         }
     }
 
-    // Ensure every entry has a FAN record
-    for (const entry of grouped.values()) {
-        if (!entry.FAN) {
-            entry.FAN = {
-                tmode: 0,
-                cycle_count: 0,
-                total_runtime_minutes: 0,
-                avg_indoor_temp: 0,
-                avg_outdoor_temp: 0,
-                avg_indoor_humidity: 0,
-                avg_outdoor_humidity: 0
-            };
-        }
-    }
-
-    res.json(Array.from(grouped.values()));
+    res.json(Array.from(grouped.values()).reverse());
   } catch (error) {
     Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
     res.status(500).json({ error: 'Failed to retrieve daily cycles data' });
@@ -2138,20 +1983,6 @@ const getHourlyCycles = (req, res) => {
             entry.FAN = { tmode, ...rest };
         } else {
             entry.HVAC = { tmode, ...rest };
-        }
-    }
-    // Ensure every entry has a FAN record
-    for (const entry of grouped.values()) {
-        if (!entry.FAN) {
-            entry.FAN = {
-                tmode: 0,
-                cycle_count: 0,
-                total_runtime_minutes: 0,
-                avg_indoor_temp: 0,
-                avg_outdoor_temp: 0,
-                avg_indoor_humidity: 0,
-                avg_outdoor_humidity: 0
-            };
         }
     }
 

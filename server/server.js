@@ -18,8 +18,4 @@ app.listen(PORT, () => {
     Logger.info(`Proxy running at http://localhost:${PORT}`, 'server', 'listen');
     const mqttClient = require('./mqttClient');
     mqttClient.initialize();
-
-    // Initialize email reporting cron jobs
-    const emailService = require('./services/emailService');
-    emailService.scheduleJobs();
 });

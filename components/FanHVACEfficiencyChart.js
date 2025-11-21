@@ -30,12 +30,8 @@ const FanHVACEfficiencyChart = ({ thermostatIp, isDarkMode, parentComponent = nu
 
                     json.forEach((d) => {
                         const label = new Date(d.run_date).toLocaleDateString();
-                        if (d.hvac_runtime_minutes) {
-                            hvacData.push({ x: label, y: d.hvac_runtime_minutes / 60 });
-                        }
-                        if (d.fan_runtime_minutes) {
-                            fanData.push({ x: label, y: d.fan_runtime_minutes / 60 });
-                        }
+                        hvacData.push({ x: label, y: d.hvac_runtime_minutes / 60 });
+                        fanData.push({ x: label, y: d.fan_runtime_minutes / 60 });
                     });
 
                     setChartData({ hvacData, fanData });

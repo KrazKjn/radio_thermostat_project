@@ -1,10 +1,10 @@
 import React, { useRef, useEffect, useState, useContext } from 'react';
 import { View, Text, TextInput, Button, TouchableOpacity, StyleSheet, Picker, ScrollView } from 'react-native';
-import { useAuth } from '../context/AuthContext';
-import { UserContext } from '../context/UserContext';
-import commonStyles from "../styles/commonStyles";
+import { useAuth } from '../../context/AuthContext';
+import { UserContext } from '../../context/UserContext';
+import commonStyles from "../../styles/commonStyles";
 
-const UserManagement = () => {
+const UserManagementScreen = () => {
   const { tokenInfo } = useAuth();
   const {
     users, roles, fetchUsers, fetchRoles, addUser, updateUser, disableUser
@@ -236,4 +236,4 @@ const UserManagement = () => {
   );
 };
 
-export default UserManagement;
+export default UserManagementScreen;

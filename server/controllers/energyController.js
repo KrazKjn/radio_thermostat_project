@@ -13,7 +13,6 @@ const { HVAC_MODE_COOL, HVAC_MODE_HEAT } = require('../../constants/hvac_mode');
 const MAX_CYCLE_RUNTIME_MINUTES = 120.0; // 2 hours
 const MIN_CYCLE_RUNTIME_MINUTES = 2.0; // 2 minutes
 
-
 const getEnergyCosting = (req, res) => {
     try {
         const rows = db.prepare('SELECT * FROM view_energy_costing').all();
@@ -118,7 +117,7 @@ const updateSummary = (summary, cycleData, type, tmode) => {
   }
 };
 
-const getConsumptionReport = (req, res) => {
+const getEnergyUsage = (req, res) => {
     try {
         const { ip } = req.params;
         let whereClause = '';
@@ -257,7 +256,7 @@ const getConsumptionReport = (req, res) => {
         res.json(report);
 
     } catch (error) {
-        Logger.error(`Error in getConsumptionReport: ${error.message}`, 'EnergyController', 'getConsumptionReport');
+        Logger.error(`Error in getEnergyUsage: ${error.message}`, 'EnergyController', 'getEnergyUsage');
         res.status(500).json({ error: 'Failed to generate consumption report' });
     }
 };
@@ -270,5 +269,5 @@ module.exports = {
     deleteEnergyCosting,
     getEnergyTypes,
     getUnitTypes,
-    getConsumptionReport
+    getEnergyUsage
 };

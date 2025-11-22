@@ -5,7 +5,7 @@ import { HostnameContext } from '../context/HostnameContext';
 import { Picker } from '@react-native-picker/picker';
 import commonStyles from '../styles/commonStyles';
 
-const Logger = require('./Logger');
+const Logger = require('../components/Logger');
 
 const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -80,14 +80,14 @@ const DayDetail = ({ title, data, level }) => {
   );
 };
 
-const ConsumptionReport = () => {
+const EnergyUsageScreen = () => {
     const hostname = useContext(HostnameContext);
-    const { getThermostats, getConsumptionReport } = useThermostat();
+    const { getThermostats, getEnergyUsage } = useThermostat();
     const [reportData, setReportData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [thermostats, setThermostats] = useState([]);
-    const [selectedThermostat, setSelectedThermostat] = useState(null);
+    const [selectedThermostat, setSelectedThermostat] = useState('Whole Home');
 
     useEffect(() => {
         const fetchThermostats = async () => {
@@ -98,7 +98,7 @@ const ConsumptionReport = () => {
                     setSelectedThermostat(data[0].ip);
                 }
             } catch (err) {
-                Logger.error(`Error fetching thermostats: ${err.message}`, 'ConsumptionReport', 'fetchThermostats');
+                Logger.error(`Error fetching thermostats: ${err.message}`, 'EnergyUsage', 'fetchThermostats');
                 setError('Failed to fetch thermostats');
             }
         };
@@ -112,10 +112,10 @@ const ConsumptionReport = () => {
             setLoading(true);
             setError(null);
             try {
-                const data = await getConsumptionReport(selectedThermostat, hostname);
+                const data = await getEnergyUsage(selectedThermostat, hostname);
                 setReportData(data);
             } catch (err) {
-                Logger.error(`Error fetching consumption report: ${err.message}`, 'ConsumptionReport', 'fetchReport');
+                Logger.error(`Error fetching consumption report: ${err.message}`, 'EnergyUsageScreen', 'fetchReport');
                 setError('Failed to fetch consumption report');
             } finally {
                 setLoading(false);
@@ -126,7 +126,7 @@ const ConsumptionReport = () => {
 
     return (
         <ScrollView contentContainerStyle={commonStyles.container}>
-        <Text style={commonStyles.headerNetwork}>Consumption Report</Text>
+        <Text style={commonStyles.headerNetwork}>Energy Usage Report</Text>
 
         <View style={commonStyles.containerSimple}>
             <Picker
@@ -204,4 +204,4 @@ const getStyles = (level) => ({
   },
 });
 
-export default ConsumptionReport;
+export default EnergyUsageScreen;

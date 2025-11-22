@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { useAuth } from '../context/AuthContext';
-import { HostnameContext } from '../context/HostnameContext';
-import commonStyles from '../styles/commonStyles';
+import { useAuth } from '../../context/AuthContext';
+import { HostnameContext } from '../../context/HostnameContext';
+import commonStyles from '../../styles/commonStyles';
 
-const EnergyCosting = () => {
+const EnergyCostingScreen = () => {
   const { token } = useAuth();
   const hostname = React.useContext(HostnameContext);
   const [costingData, setCostingData] = useState([]);
@@ -230,4 +230,4 @@ const EnergyCosting = () => {
   );
 };
 
-export default EnergyCosting;
+export default EnergyCostingScreen;

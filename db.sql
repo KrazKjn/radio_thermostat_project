@@ -185,39 +185,6 @@ FROM readings_with_next
 WHERE next_ts IS NOT NULL
 GROUP BY day, ip;
 
--- DROP TRIGGER IF EXISTS log_tstate_cycle;
--- CREATE TRIGGER log_tstate_cycle
--- AFTER INSERT ON scan_data
--- FOR EACH ROW
--- BEGIN
---     -- Case 1: INSERT new cycle if tstate = 1 and no open cycle exists
---     INSERT INTO tstate_cycles (
---         thermostat_id,
---         tmode,
---         start_timestamp,
---         start_time
---     )
---     SELECT
---         NEW.thermostat_id,
---         NEW.tmode,
---         NEW.timestamp,
---         datetime(NEW.timestamp / 1000, 'unixepoch')
---     WHERE NEW.tstate != 0
---       AND NOT EXISTS (
---           SELECT 1 FROM tstate_cycles
---           WHERE thermostat_id = NEW.thermostat_id
---             AND stop_timestamp IS NULL
---       );
-
---     -- Case 2: UPDATE last open cycle if tstate = 0
---     UPDATE tstate_cycles
---     SET stop_timestamp = NEW.timestamp,
---         stop_time = datetime(NEW.timestamp / 1000, 'unixepoch'),
---         run_time = ROUND((NEW.timestamp - start_timestamp) / 60000.0, 2)
---     WHERE thermostat_id = NEW.thermostat_id
---       AND stop_timestamp IS NULL
---       AND NEW.tstate = 0;
--- END;
 DROP TRIGGER IF EXISTS log_tstate_cycle;
 CREATE TRIGGER log_tstate_cycle
 AFTER INSERT ON scan_data
@@ -235,7 +202,7 @@ BEGIN
         NEW.tmode,
         NEW.timestamp,
         datetime(NEW.timestamp / 1000, 'unixepoch')
-    WHERE NEW.tstate = 1
+    WHERE NEW.tstate IN (1, 2)
       AND NEW.tmode IN (1, 2)
       AND NOT EXISTS (
           SELECT 1 FROM tstate_cycles
@@ -576,6 +543,18 @@ CREATE TABLE IF NOT EXISTS energy_costing (
     FOREIGN KEY (unit_type_id) REFERENCES unit_types(id)
 );
 
+DROP VIEW IF EXISTS view_energy_costing;
+CREATE VIEW view_energy_costing AS
+SELECT
+    ec.id AS costing_id,
+    ec.effective_start_date,
+    et.name AS energy_type,
+    ec.cost_per_unit,
+    ut.name AS unit_type
+FROM energy_costing ec
+JOIN energy_types et ON ec.energy_type_id = et.id
+JOIN unit_types ut ON ec.unit_type_id = ut.id;
+
 CREATE TABLE IF NOT EXISTS fan_motors (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   thermostat_id INTEGER REFERENCES thermostats(id),
@@ -587,4 +566,15 @@ CREATE TABLE IF NOT EXISTS fan_motors (
   rated_amps REAL,
   horsepower REAL,
   efficiency REAL
+);
+
+CREATE TABLE IF NOT EXISTS report_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    thermostat_id INTEGER NOT NULL,
+    report_type TEXT NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (thermostat_id) REFERENCES thermostats(id),
+    UNIQUE(user_id, thermostat_id, report_type)
 );

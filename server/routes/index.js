@@ -6,6 +6,7 @@ const userController = require('../controllers/userController');
 const authController = require('../controllers/authController');
 const weatherController = require('../controllers/weatherController');
 const energyController = require('../controllers/energyController');
+const subscriptionController = require('../controllers/subscriptionController');
 
 // Helper to apply both middlewares
 const authWithRefresh = [authenticateToken, refreshTokenMiddleware];
@@ -17,7 +18,7 @@ router.put('/energy/costing/:id', authWithRefresh, energyController.updateEnergy
 router.delete('/energy/costing/:id', authWithRefresh, energyController.deleteEnergyCosting);
 router.get('/energy/types', authWithRefresh, energyController.getEnergyTypes);
 router.get('/energy/units', authWithRefresh, energyController.getUnitTypes);
-router.get('/energy/consumption-report/:ip', authWithRefresh, energyController.getConsumptionReport);
+router.get('/energy/usage/:ip', authWithRefresh, energyController.getEnergyUsage);
 
 // Auth
 router.post('/login', authController.login);
@@ -92,5 +93,15 @@ router.post('/captureStatIn', thermostatController.captureStatIn);
 
 // Weather
 router.get('/weather', authWithRefresh, weatherController.getWeather);
+
+// Subscriptions
+// const subscriptionRoutes = require('./subscriptions');
+// router.use('/subscriptions', authWithRefresh, subscriptionRoutes);
+
+// Subscriptions
+router.get('/subscriptions', authWithRefresh, subscriptionController.getAllSubscriptions);
+router.post('/subscriptions', authWithRefresh, subscriptionController.createSubscription);
+router.put('/subscriptions/:id', authWithRefresh, subscriptionController.updateSubscription);
+router.delete('/subscriptions/:id', authWithRefresh, subscriptionController.deleteSubscription);
 
 module.exports = router;

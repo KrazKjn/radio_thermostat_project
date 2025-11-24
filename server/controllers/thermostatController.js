@@ -27,6 +27,23 @@ const MAX_CYCLE_RUNTIME_MINUTES = 120.0; // 2 hours
 const MIN_CYCLE_RUNTIME_MINUTES = 2.0; // 2 minutes
 const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000; // 14 days in milliseconds
 
+function getThermostatByIp(ip) {
+    // 1. Check cache
+    const cached = cache.get(ip);
+    if (cached) {
+        return cached;
+    }
+
+    // 2. Query DB
+    const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+
+    // 3. Cache result if found
+    if (thermostat) {
+        cache.set(ip, thermostat);
+    }
+
+    return thermostat;
+}
 const getThermostatData = async (req, res) => {
     let ip = undefined;
     const debugLevel = Number.isFinite(Number(req.query?.debugLevel)) ? Number(req.query.debugLevel) : 6;
@@ -1657,10 +1674,10 @@ const getDailyModeRuntime = (req, res) => {
   try {
     const { ip } = req.params;
     const { days } = req.query;
-    const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+    const thermostat = getThermostatByIp(ip);
 
     if (!thermostat) {
-      return res.status(404).json({ error: "Thermostat not found" });
+        return res.status(404).json({ error: "Thermostat not found" });
     }
 
     const hasLimit = days && Number(days) > 0;
@@ -1893,7 +1910,8 @@ const getHourlyEnv = (req, res) => {
     try {
         const { ip } = req.params;
         const { hours } = req.query;
-        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        const thermostat = getThermostatByIp(ip);
+
         if (!thermostat) {
             return res.status(404).json({ error: "Thermostat not found" });
         }
@@ -1951,7 +1969,8 @@ const getFanVsHvacDaily = (req, res) => {
     try {
         const { ip } = req.params;
         const { days } = req.query;
-        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        const thermostat = getThermostatByIp(ip);
+
         if (!thermostat) {
             return res.status(404).json({ error: "Thermostat not found" });
         }
@@ -2009,11 +2028,19 @@ const getTempVsRuntime = (req, res) => {
 const getDailyCycles = (req, res) => {
   try {
     const { ip } = req.params;
-    const { days } = req.query;
-    const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+    const thermostat = getThermostatByIp(ip);
 
     if (!thermostat) {
-      return res.status(404).json({ error: "Thermostat not found" });
+        return res.status(404).json({ error: "Thermostat not found" });
+    }
+
+    const { days } = req.query;
+    const cacheKey = `daily_cycles_${ip}_${days || 'all'}`;
+
+    const cachedItem = cache.get(cacheKey);
+    if (cachedItem) {
+        Logger.debug(`[Analytics] Returning cached daily cycles for IP ${ip}`, 'ThermostatController', 'getDailyCycles');
+        return res.json(cachedItem);
     }
 
     const hasLimit = days && Number(days) > 0;
@@ -2100,7 +2127,11 @@ const getDailyCycles = (req, res) => {
         }
     }
 
-    res.json(Array.from(grouped.values()));
+    const groupedArray = Array.from(grouped.values());
+    cache.set(cacheKey, groupedArray, cache.TTL.ANALYTICS_SHORT);
+    Logger.debug(`[Analytics] Hourly runtime for IP ${ip} cached.`, 'ThermostatController', 'getDailyCycles');
+
+    res.json(groupedArray);
   } catch (error) {
     Logger.error(`Error in getDailyCycles: ${error.message}`, 'ThermostatController', 'getDailyCycles');
     res.status(500).json({ error: 'Failed to retrieve daily cycles data' });
@@ -2110,11 +2141,19 @@ const getDailyCycles = (req, res) => {
 const getHourlyCycles = (req, res) => {
   try {
     const { ip } = req.params;
-    const { hours } = req.query;
-    const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+    const thermostat = getThermostatByIp(ip);
 
     if (!thermostat) {
-      return res.status(404).json({ error: "Thermostat not found" });
+        return res.status(404).json({ error: "Thermostat not found" });
+    }
+
+    const { hours } = req.query;
+    const cacheKey = `hourly_cycles_${ip}_${hours || 'all'}`;
+
+    const cachedItem = cache.get(cacheKey);
+    if (cachedItem) {
+        Logger.debug(`[Analytics] Returning cached hourly cycles for IP ${ip}`, 'ThermostatController', 'getHourlyCycles');
+        return res.json(cachedItem);
     }
 
     const hasLimit = hours && Number(hours) > 0;
@@ -2205,7 +2244,11 @@ const getHourlyCycles = (req, res) => {
         }
     }
 
-    res.json(Array.from(grouped.values()).reverse());
+    const groupedArray = Array.from(grouped.values());
+    cache.set(cacheKey, groupedArray, cache.TTL.ANALYTICS_SHORT);
+    Logger.debug(`[Analytics] Hourly runtime for IP ${ip} cached.`, 'ThermostatController', 'getHourlyCycles');
+
+    res.json(groupedArray);
   } catch (error) {
     Logger.error(`Error in getHourlyCycles: ${error.message}`, 'ThermostatController', 'getHourlyCycles');
     res.status(500).json({ error: 'Failed to retrieve hourly cycles data' });
@@ -2215,7 +2258,8 @@ const getHourlyCycles = (req, res) => {
 const getSensorSettings = (req, res) => {
     try {
         const { ip } = req.params;
-        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        const thermostat = getThermostatByIp(ip);
+
         if (!thermostat) {
             return res.status(404).json({ error: "Thermostat not found" });
         }
@@ -2231,7 +2275,8 @@ const updateSensorSettings = (req, res) => {
     try {
         const { ip } = req.params;
         const { shelly_device_id } = req.body;
-        const thermostat = db.prepare(`SELECT id FROM thermostats WHERE ip = ?`).get(ip);
+        const thermostat = getThermostatByIp(ip);
+
         if (!thermostat) {
             return res.status(404).json({ error: "Thermostat not found" });
         }

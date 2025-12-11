@@ -5,9 +5,20 @@ const thermostatController = require('../controllers/thermostatController');
 const userController = require('../controllers/userController');
 const authController = require('../controllers/authController');
 const weatherController = require('../controllers/weatherController');
+const energyController = require('../controllers/energyController');
+const subscriptionController = require('../controllers/subscriptionController');
 
 // Helper to apply both middlewares
 const authWithRefresh = [authenticateToken, refreshTokenMiddleware];
+
+// Energy
+router.get('/energy/costing', authWithRefresh, energyController.getEnergyCosting);
+router.post('/energy/costing', authWithRefresh, energyController.addEnergyCosting);
+router.put('/energy/costing/:id', authWithRefresh, energyController.updateEnergyCosting);
+router.delete('/energy/costing/:id', authWithRefresh, energyController.deleteEnergyCosting);
+router.get('/energy/types', authWithRefresh, energyController.getEnergyTypes);
+router.get('/energy/units', authWithRefresh, energyController.getUnitTypes);
+router.get('/energy/usage/:ip', authWithRefresh, energyController.getEnergyUsage);
 
 // Auth
 router.post('/login', authController.login);
@@ -43,6 +54,8 @@ router.post("/cloud/:ip", authWithRefresh, thermostatController.updateCloud);
 router.get('/thermostat/:ip/daily-cycles', authWithRefresh, thermostatController.getDailyCycles);
 // Get hourly cycle counts and runtime by thermostat IP
 router.get('/thermostat/:ip/hourly-cycles', authWithRefresh, thermostatController.getHourlyCycles);
+// Get thermostat settings change log
+router.get('/thermostat/:ip/settings-log', authWithRefresh, thermostatController.getSettingsLog);
 
 // Sensor Settings
 router.get('/sensor/:ip', authWithRefresh, thermostatController.getSensorSettings);
@@ -82,5 +95,15 @@ router.post('/captureStatIn', thermostatController.captureStatIn);
 
 // Weather
 router.get('/weather', authWithRefresh, weatherController.getWeather);
+
+// Subscriptions
+// const subscriptionRoutes = require('./subscriptions');
+// router.use('/subscriptions', authWithRefresh, subscriptionRoutes);
+
+// Subscriptions
+router.get('/subscriptions', authWithRefresh, subscriptionController.getAllSubscriptions);
+router.post('/subscriptions', authWithRefresh, subscriptionController.createSubscription);
+router.put('/subscriptions/:id', authWithRefresh, subscriptionController.updateSubscription);
+router.delete('/subscriptions/:id', authWithRefresh, subscriptionController.deleteSubscription);
 
 module.exports = router;

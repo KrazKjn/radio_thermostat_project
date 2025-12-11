@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }) => {
         Logger.debug('Clearing Token ... Done.', 'AuthContext', 'resetToken', 0);
     }
 
-    const login = async (username, password) => {
+    const login = useCallback(async (username, password) => {
         let logMessage = null;
         try {
             try {
@@ -91,9 +91,9 @@ export const AuthProvider = ({ children }) => {
             Alert.alert("Login Failed", error.message);
             return { success: false, error: error.message, logMessage: logMessage};
         }
-    };
+    }, [hostname, storeAndSetToken]);
 
-    const logout = async () => {
+    const logout = useCallback(async () => {
         let tokenLocal = null;
         try {
             tokenLocal = await AsyncStorage.getItem("auth_token");
@@ -108,9 +108,9 @@ export const AuthProvider = ({ children }) => {
         }
         await resetToken();
         Alert.alert("Logged out", "You have been logged out successfully.");
-    };
+    }, [hostname, resetToken]);
 
-    const checkUserSession = async () => {
+    const checkUserSession = useCallback(async () => {
         try {
             const storedToken = await AsyncStorage.getItem("auth_token");
             if (!storedToken) throw new Error("No valid session");
@@ -137,10 +137,10 @@ export const AuthProvider = ({ children }) => {
             return false;
         }
         return true;
-    };
+    }, [hostname, storeAndSetToken, resetToken]);
 
     // Function to update both token and token info
-    const updateAuth = async (oldToken, newToken) => {
+    const updateAuth = useCallback(async (oldToken, newToken) => {
         if (newToken === oldToken) {
             Logger.warn('No change in token detected.', 'AuthContext', 'updateAuth');
             return;  // No change
@@ -180,7 +180,7 @@ export const AuthProvider = ({ children }) => {
             console.error(`[AuthContext:updateAuth]: ${new Date().toString()} Error updating token info:`, error);
             Logger.error(`Error updating token info: ${error.message}`, 'AuthContext', 'updateAuth');
         }
-    };
+    }, [hostname, storeAndSetToken]);
 
     const authenticatedApiFetch = useCallback(async (url, method, body, errorMessage, logMessage, timeout) => {
         while (!token) {

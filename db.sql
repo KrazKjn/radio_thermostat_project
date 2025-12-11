@@ -185,39 +185,6 @@ FROM readings_with_next
 WHERE next_ts IS NOT NULL
 GROUP BY day, ip;
 
--- DROP TRIGGER IF EXISTS log_tstate_cycle;
--- CREATE TRIGGER log_tstate_cycle
--- AFTER INSERT ON scan_data
--- FOR EACH ROW
--- BEGIN
---     -- Case 1: INSERT new cycle if tstate = 1 and no open cycle exists
---     INSERT INTO tstate_cycles (
---         thermostat_id,
---         tmode,
---         start_timestamp,
---         start_time
---     )
---     SELECT
---         NEW.thermostat_id,
---         NEW.tmode,
---         NEW.timestamp,
---         datetime(NEW.timestamp / 1000, 'unixepoch')
---     WHERE NEW.tstate != 0
---       AND NOT EXISTS (
---           SELECT 1 FROM tstate_cycles
---           WHERE thermostat_id = NEW.thermostat_id
---             AND stop_timestamp IS NULL
---       );
-
---     -- Case 2: UPDATE last open cycle if tstate = 0
---     UPDATE tstate_cycles
---     SET stop_timestamp = NEW.timestamp,
---         stop_time = datetime(NEW.timestamp / 1000, 'unixepoch'),
---         run_time = ROUND((NEW.timestamp - start_timestamp) / 60000.0, 2)
---     WHERE thermostat_id = NEW.thermostat_id
---       AND stop_timestamp IS NULL
---       AND NEW.tstate = 0;
--- END;
 DROP TRIGGER IF EXISTS log_tstate_cycle;
 CREATE TRIGGER log_tstate_cycle
 AFTER INSERT ON scan_data
@@ -235,7 +202,7 @@ BEGIN
         NEW.tmode,
         NEW.timestamp,
         datetime(NEW.timestamp / 1000, 'unixepoch')
-    WHERE NEW.tstate = 1
+    WHERE NEW.tstate IN (1, 2)
       AND NEW.tmode IN (1, 2)
       AND NOT EXISTS (
           SELECT 1 FROM tstate_cycles
@@ -496,7 +463,8 @@ CREATE TABLE IF NOT EXISTS compressors (
     breaker_max REAL,
     capacity REAL,
     btu_per_hr_low REAL,
-    btu_per_hr_high REAL
+    btu_per_hr_high REAL,
+    heat_source_id INTEGER REFERENCES energy_types(id)
 );
 
 CREATE TABLE IF NOT EXISTS thermostat_compressor (
@@ -508,7 +476,7 @@ CREATE TABLE IF NOT EXISTS thermostat_compressor (
 
 DROP VIEW IF EXISTS view_hvac_systems;
 CREATE VIEW view_hvac_systems AS
-SELECT 
+SELECT
   t.*,
   c.make AS compressor_make,
   c.model AS compressor_model,
@@ -528,6 +496,7 @@ SELECT
   c.capacity,
   c.btu_per_hr_low,
   c.btu_per_hr_high,
+  c.heat_source_id,
   f.make AS fan_make,
   f.model AS fan_model,
   f.year AS fan_year,
@@ -549,6 +518,43 @@ CREATE TABLE IF NOT EXISTS shelly_sensors (
     UNIQUE(shelly_device_id)
 );
 
+-- Energy Costing
+CREATE TABLE IF NOT EXISTS energy_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL
+);
+
+INSERT INTO energy_types (name) VALUES ('Electricity'), ('Propane'), ('Natural Gas');
+
+CREATE TABLE IF NOT EXISTS unit_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL
+);
+
+INSERT INTO unit_types (name) VALUES ('kWh'), ('Gallon');
+
+CREATE TABLE IF NOT EXISTS energy_costing (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    effective_start_date INTEGER NOT NULL,
+    energy_type_id INTEGER NOT NULL,
+    cost_per_unit REAL NOT NULL,
+    unit_type_id INTEGER NOT NULL,
+    FOREIGN KEY (energy_type_id) REFERENCES energy_types(id),
+    FOREIGN KEY (unit_type_id) REFERENCES unit_types(id)
+);
+
+DROP VIEW IF EXISTS view_energy_costing;
+CREATE VIEW view_energy_costing AS
+SELECT
+    ec.id AS costing_id,
+    ec.effective_start_date,
+    et.name AS energy_type,
+    ec.cost_per_unit,
+    ut.name AS unit_type
+FROM energy_costing ec
+JOIN energy_types et ON ec.energy_type_id = et.id
+JOIN unit_types ut ON ec.unit_type_id = ut.id;
+
 CREATE TABLE IF NOT EXISTS fan_motors (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   thermostat_id INTEGER REFERENCES thermostats(id),
@@ -560,4 +566,21 @@ CREATE TABLE IF NOT EXISTS fan_motors (
   rated_amps REAL,
   horsepower REAL,
   efficiency REAL
+);
+
+-- Add a user for system-initiated changes
+INSERT INTO users (id, username, email, password, role)
+SELECT 'console', 'Console', 'console@system.local', 'N/A', 'system'
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = 'console');
+
+CREATE TABLE thermostat_settings_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thermostat_id INTEGER NOT NULL,
+    user_id TEXT, -- Can be NULL if the change is made by the system or an unknown source
+    timestamp INTEGER NOT NULL,
+    setting_key TEXT NOT NULL, -- e.g., 'tTemp', 'tmode'
+    previous_value TEXT,
+    new_value TEXT NOT NULL,
+    FOREIGN KEY (thermostat_id) REFERENCES thermostats(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );

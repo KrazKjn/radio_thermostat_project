@@ -27,7 +27,7 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
     const fetchData = async () => {
         try {
             const scannedData = await fetchScannedData(thermostatIp, hostname);
-            let filteredData = scannedData.filter(entry => entry.temp !== 0);
+            let filteredData = scannedData.filter(entry => entry.temp > 0);
             const tempData = filteredData.length > 1 && new Date(filteredData[0].lastUpdated) < new Date(filteredData[filteredData.length - 1].lastUpdated) ? filteredData : [...filteredData].reverse();
             setDataPoints(tempData);
             if (onDataChange) {
@@ -111,6 +111,8 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
     const currentTemps = dataPoints.map((entry) => entry.temp || 0);
     const targetTemps = dataPoints.map((entry) => entry.tmode === HVAC_MODE_COOL ? entry.t_cool : entry.t_heat || 0);
     const acStates = dataPoints.map((entry) => ((entry.tstate === HVAC_MODE_HEAT || entry.tstate === HVAC_MODE_COOL) ? 1 : 0));
+    const hvacLineColor = dataPoints.length > 0 ? (dataPoints[dataPoints.length - 1].tmode === HVAC_MODE_COOL ? chartColors.lineColorHVACCooling : chartColors.lineColorHVACHeating) : chartColors.lineColorHVAC;
+    const hvacModeText = dataPoints.length > 0 ? (dataPoints[dataPoints.length - 1].tmode === HVAC_MODE_COOL ? "Cooling" : "Heating") : "HVAC State";
     const fanStates = dataPoints.map((entry) => (entry.fstate === 1 ? 1 : 0));
     const labelStep = Math.ceil(labels.length / (120 / 3));
     const displayLabels = labels.map((label, idx) => (idx % labelStep === 0 ? label : ""));
@@ -187,10 +189,10 @@ const LiveChart = ({ thermostatIp, parentComponent = null, isDarkMode: initialIs
                         data={{
                             labels: displayLabels,
                             datasets: [
-                                { data: acStates, color: () => chartColors.lineColorHVAC, label: "HVAC State", withDots: false },
+                                { data: acStates, color: () => hvacLineColor, label: () => hvacModeText, withDots: false },
                                 { data: fanStates, color: () => chartColors.lineColorFan, label: "Fan State", withDots: false }
                             ],
-                            legend: ["HVAC State", "Fan State"]
+                            legend: [hvacModeText, "Fan State"]
                         }}
                         width={chartWidth}
                         height={260}

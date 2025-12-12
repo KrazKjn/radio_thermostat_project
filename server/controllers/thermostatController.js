@@ -129,99 +129,87 @@ const getThermostatData = async (req, res) => {
 };
 
 const updateThermostat = async (req, res) => {
-    Logger.info(`Received POST request: ${req.url}`); // Log the request body
-    Logger.debug("Request Body:", 'ThermostatController', 'updateThermostat', 2);
-    const { tmode, temperature, time, fmode, hold, override } = req.body; // Get values from request
-    const { ip } = req.params; // Get ip from request parameters
-    // Validate request body
-    if (!ip) {
-        Logger.warn("IP address is missing in the request parameters.", 'ThermostatController', 'updateThermostat');
-        return res.status(400).json({ error: "Missing target ip address" });
-    }
-    if (!time) {
-        if (tmode === undefined && fmode === undefined && hold === undefined && override === undefined) {
-            Logger.warn("time, tmode, fmode, hold, and override are all missing in the request body. One is required.", 'ThermostatController', 'updateThermostat');
-            return res.status(400).json({ error: "Missing required fields: tmode, fmode, hold, override" });
-        }
-    }
-
-    // Get current state BEFORE making changes
-    const currentTstatResponse = await fetch(`http://localhost:${process.env.PORT || 5000}/tstat/${ip}?noCache=true`, {
-        headers: { "Authorization": req.headers.authorization }
-    });
-    const currentTstat = await currentTstatResponse.json();
+    const { ip } = req.params;
+    const { tmode, temperature, time, fmode, hold, override } = req.body;
+    const userId = req.user ? req.user.id : 'console';
     const thermostat = getThermostatByIp(ip);
-    const userId = req.user ? req.user.id : 'console'; // Default to console if user not found
 
-    const payload = {
-        ...(tmode !== undefined ? { tmode: Number(tmode) } : {}),
-        ...(fmode !== undefined ? { fmode: Number(fmode) } : {}),
-        ...(time !== undefined && time !== null ? { time } : {}),
-        ...(tmode === HVAC_MODE_HEAT && temperature !== undefined ? { t_heat: Number(temperature) } : {}),
-        ...(tmode === HVAC_MODE_COOL && temperature !== undefined ? { t_cool: Number(temperature) } : {}),
-        ...(hold !== undefined ? { hold: Number(hold) } : {}),
-        ...(override !== undefined ? { override: Number(override) } : {})
-    };
-    Logger.debug(`POST body: ${JSON.stringify(payload, null, 2)}`, 'ThermostatController', 'updateThermostat', 2); // Log the post body
-
-    // Log changes
-    const logChange = (key, oldValue, newValue) => {
-        if (oldValue != newValue && newValue !== undefined) {
-            db.prepare(`
-                INSERT INTO thermostat_settings_log (thermostat_id, user_id, timestamp, setting_key, previous_value, new_value)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `).run(thermostat.id, userId, Date.now(), key, String(oldValue), String(newValue));
-        }
-    };
-
-    logChange('tmode', currentTstat.tmode, payload.tmode);
-    if (payload.t_heat !== undefined) {
-        logChange('t_heat', currentTstat.t_heat, payload.t_heat);
+    if (!thermostat) {
+        return res.status(404).json({ error: "Thermostat not found" });
     }
-    if (payload.t_cool !== undefined) {
-        logChange('t_cool', currentTstat.t_cool, payload.t_cool);
-    }
-    logChange('fmode', currentTstat.fmode, payload.fmode);
-    logChange('hold', currentTstat.hold, payload.hold);
-    logChange('override', currentTstat.override, payload.override);
 
     try {
-        const response = await fetch(`http://${ip}/tstat`, {
+        // 1. Get current state
+        const currentTstatResponse = await fetch(`http://${ip}/tstat`);
+        const currentTstat = await currentTstatResponse.json();
+
+        // 2. Prepare payload and log unacknowledged changes
+        const payload = {
+            ...(tmode !== undefined && { tmode: Number(tmode) }),
+            ...(fmode !== undefined && { fmode: Number(fmode) }),
+            ...(time !== undefined && time !== null && { time }),
+            ...(tmode === HVAC_MODE_HEAT && temperature !== undefined && { t_heat: Number(temperature) }),
+            ...(tmode === HVAC_MODE_COOL && temperature !== undefined && { t_cool: Number(temperature) }),
+            ...(hold !== undefined && { hold: Number(hold) }),
+            ...(override !== undefined && { override: Number(override) }),
+        };
+
+        const logIds = [];
+        const logChange = (key, oldValue, newValue) => {
+            if (newValue !== undefined && oldValue != newValue) {
+                const result = db.prepare(`
+                    INSERT INTO thermostat_settings_log (thermostat_id, user_id, timestamp, setting_key, previous_value, new_value, acknowledged)
+                    VALUES (?, ?, ?, ?, ?, ?, 0)
+                `).run(thermostat.id, userId, Date.now(), key, String(oldValue), String(newValue));
+                logIds.push({ id: result.lastInsertRowid, key, value: newValue });
+            }
+        };
+
+        logChange('tmode', currentTstat.tmode, payload.tmode);
+        logChange('t_heat', currentTstat.t_heat, payload.t_heat);
+        logChange('t_cool', currentTstat.t_cool, payload.t_cool);
+        logChange('fmode', currentTstat.fmode, payload.fmode);
+        logChange('hold', currentTstat.hold, payload.hold);
+
+        // 3. Send update to thermostat
+        const updateResponse = await fetch(`http://${ip}/tstat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
-  
-        const text = (await response.text()).trim(); // Removes \r\n and whitespace
 
-        // Ensure the token is passed when updating the cache
-        const response2 = await fetch(`http://localhost:${process.env.PORT || 5000}/tstat/${ip}?noCache=true`, {
-            method: "GET",
-            headers: { 
-                "Authorization": req.headers.authorization // Include the token
+        if (!updateResponse.ok) {
+            throw new Error('Thermostat update command failed');
+        }
+         const text = (await updateResponse.text()).trim();
+
+        // 4. Verify and acknowledge changes
+        setTimeout(async () => {
+            try {
+                const verifyResponse = await fetch(`http://${ip}/tstat`);
+                const verifiedTstat = await verifyResponse.json();
+                const acknowledgeStmt = db.prepare('UPDATE thermostat_settings_log SET acknowledged = 1 WHERE id = ?');
+
+                for (const log of logIds) {
+                    if (log.key === 't_heat' && verifiedTstat.t_heat == log.value) {
+                        acknowledgeStmt.run(log.id);
+                    } else if (log.key === 't_cool' && verifiedTstat.t_cool == log.value) {
+                        acknowledgeStmt.run(log.id);
+                    } else if (verifiedTstat[log.key] == log.value) {
+                        acknowledgeStmt.run(log.id);
+                    }
+                }
+            } catch (verificationError) {
+                Logger.error(`Failed to verify and acknowledge thermostat settings for IP ${ip}: ${verificationError.message}`, 'ThermostatController', 'updateThermostat');
             }
+        }, 1000); // 1-second delay before verification
+
+        res.json({
+            status: "success",
+            message: "Tstat command processed successfully",
+            result: text
         });
 
-        const data = await response2.json();
-
-        Logger.debug(`Received POST response: ${req.url}: ${text}`, 'ThermostatController', 'updateThermostat', 1);
-        if (text === "Tstat Command Processed") {
-            res.json({
-                status: "success",
-                message: "Tstat command processed successfully",
-                timestamp: Date.now(),
-                formatted: new Date().toISOString().replace('T', ' ').slice(0, 19),
-                result: text
-            });
-        } else {
-            res.status(500).json({
-                status: "error",
-                message: "Unexpected response from thermostat",
-                timestamp: Date.now(),
-                formatted: new Date().toISOString().replace('T', ' ').slice(0, 19),
-                result: text
-            });
-        }
     } catch (error) {
         Logger.error(`[Thermostat] Error Updating for IP ${ip}: ${error.message}`, 'ThermostatController', 'updateThermostat');
         res.status(500).json({ error: "Failed to update thermostat settings" });
@@ -1478,11 +1466,6 @@ const captureStatIn = async (req, res) => {
             }
         }
         if (process.env.DATABASE === "true" || saveToDatabase) {
-            // Get the last known state to compare for changes
-            const lastScan = db.prepare(`
-                SELECT tmode, tTemp FROM scan_data WHERE thermostat_id = ? ORDER BY timestamp DESC LIMIT 1
-            `).get(thermostat_id);
-
             // Database insertion
             const stmt = db.prepare(`
                 INSERT INTO scan_data (thermostat_id, timestamp, temp, tmode, tTemp, tstate, fstate)
@@ -1498,25 +1481,6 @@ const captureStatIn = async (req, res) => {
                     jsonData.tstat.tstate,
                     jsonData.tstat.fstate === HVAC_FAN_STATE_OFF && jsonData.tstat.tstate === HVAC_MODE_HEAT ? HVAC_FAN_STATE_ON : jsonData.tstat.fstate
                 );
-
-                // Log setting changes from the thermostat
-                const newTmode = jsonData.tstat.tmode;
-                const newTtemp = newTmode === HVAC_MODE_COOL ? jsonData.tstat.t_cool : newTmode === HVAC_MODE_HEAT ? jsonData.tstat.t_heat : null;
-
-                if (lastScan) {
-                    if (lastScan.tmode !== newTmode) {
-                        db.prepare(`
-                            INSERT INTO thermostat_settings_log (thermostat_id, user_id, timestamp, setting_key, previous_value, new_value)
-                            VALUES (?, ?, ?, 'tmode', ?, ?)
-                        `).run(thermostat_id, 'console', currentTime, lastScan.tmode, newTmode);
-                    }
-                    if (lastScan.tTemp !== newTtemp && newTtemp !== null) {
-                         db.prepare(`
-                            INSERT INTO thermostat_settings_log (thermostat_id, user_id, timestamp, setting_key, previous_value, new_value)
-                            VALUES (?, ?, ?, 'tTemp', ?, ?)
-                        `).run(thermostat_id, 'console', currentTime, lastScan.tTemp, newTtemp);
-                    }
-                }
                 Logger.info(`Thermostat data saved: ${location}`, 'ThermostatController', 'captureStatIn');
                 if (!cacheLiveData[ip]) {
                     getScannerDataByIp(ip, req); // Initialize cache if not present
@@ -1553,7 +1517,51 @@ const captureStatIn = async (req, res) => {
         }
     }
 
-    if (process.env.FWD_URL) {
+    // Self-healing and console change detection logic
+    const unacknowledgedSetting = db.prepare(`
+        SELECT * FROM thermostat_settings_log
+        WHERE thermostat_id = ? AND acknowledged = 0
+        ORDER BY timestamp DESC LIMIT 1
+    `).get(thermostat_id);
+
+    if (unacknowledgedSetting) {
+        const payload = {
+            [unacknowledgedSetting.setting_key]: unacknowledgedSetting.new_value,
+        };
+        responsePlaintext = Buffer.from(JSON.stringify(payload));
+        db.prepare('UPDATE thermostat_settings_log SET acknowledged = 1 WHERE id = ?').run(unacknowledgedSetting.id);
+    } else {
+        const lastAcknowledged = db.prepare(`
+            SELECT * FROM thermostat_settings_log
+            WHERE thermostat_id = ? AND acknowledged = 1
+            ORDER BY timestamp DESC LIMIT 1
+        `).get(thermostat_id);
+
+        const currentTstat = jsonData.tstat;
+        let changed = false;
+        if (lastAcknowledged) {
+            if (lastAcknowledged.setting_key === 'tmode' && lastAcknowledged.new_value != currentTstat.tmode) {
+                db.prepare(`
+                    INSERT INTO thermostat_settings_log (thermostat_id, user_id, timestamp, setting_key, previous_value, new_value, acknowledged)
+                    VALUES (?, 'console', ?, 'tmode', ?, ?, 1)
+                `).run(thermostat_id, Date.now(), lastAcknowledged.new_value, currentTstat.tmode);
+                changed = true;
+            }
+            const tempKey = currentTstat.tmode === 1 ? 't_heat' : 't_cool';
+            if (lastAcknowledged.setting_key === tempKey && lastAcknowledged.new_value != currentTstat[tempKey]) {
+                 db.prepare(`
+                    INSERT INTO thermostat_settings_log (thermostat_id, user_id, timestamp, setting_key, previous_value, new_value, acknowledged)
+                    VALUES (?, 'console', ?, ?, ?, ?, 1)
+                `).run(thermostat_id, Date.now(), tempKey, lastAcknowledged.new_value, currentTstat[tempKey]);
+                changed = true;
+            }
+        }
+        if (!changed) {
+            responsePlaintext = Buffer.from('{"ignore":0}');
+        }
+    }
+
+     if (process.env.FWD_URL) {
         const patchedRequestPlaintext = crypto.hookRequest(requestPlaintext);
         const newPayload = crypto.encAuth(aesKey, hashKey, eiv, patchedRequestPlaintext);
         const newRequest = JSON.stringify({ uuid: jsonHdr.uuid, eiv: jsonHdr.eiv, payload: newPayload });
@@ -1589,7 +1597,6 @@ const captureStatIn = async (req, res) => {
         forwardReq.write(newRequest);
         forwardReq.end();
     } else {
-        responsePlaintext = Buffer.from('{"ignore":0}');
         Logger.info(`[us to thermostat] <= ${responsePlaintext.toString()}`, 'ThermostatController', 'captureStatIn');
 
         const responseEncrypted = crypto.encAuth(aesKey, hashKey, eiv, responsePlaintext);
@@ -2456,34 +2463,4 @@ module.exports = {
     updateSensorSettings,
     getShellySettings,
     postShellySettings,
-    getSettingsLog,
-};
-
-function getSettingsLog(req, res) {
-    try {
-        const { ip } = req.params;
-        const thermostat = getThermostatByIp(ip);
-
-        if (!thermostat) {
-            return res.status(404).json({ error: "Thermostat not found" });
-        }
-
-        const rows = db.prepare(`
-            SELECT
-                l.timestamp,
-                u.username,
-                l.setting_key,
-                l.previous_value,
-                l.new_value
-            FROM thermostat_settings_log l
-            JOIN users u ON l.user_id = u.id
-            WHERE l.thermostat_id = ?
-            ORDER BY l.timestamp DESC
-        `).all(thermostat.id);
-
-        res.json(rows);
-    } catch (error) {
-        Logger.error(`Error in getSettingsLog: ${error.message}`, 'ThermostatController', 'getSettingsLog');
-        res.status(500).json({ error: 'Failed to retrieve settings log' });
-    }
 };

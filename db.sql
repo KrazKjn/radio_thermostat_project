@@ -581,6 +581,7 @@ CREATE TABLE thermostat_settings_log (
     setting_key TEXT NOT NULL, -- e.g., 'tTemp', 'tmode'
     previous_value TEXT,
     new_value TEXT NOT NULL,
+    acknowledged INTEGER DEFAULT 0, -- 0 = no, 1 = yes
     FOREIGN KEY (thermostat_id) REFERENCES thermostats(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

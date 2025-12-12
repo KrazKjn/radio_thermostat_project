@@ -54,8 +54,6 @@ router.post("/cloud/:ip", authWithRefresh, thermostatController.updateCloud);
 router.get('/thermostat/:ip/daily-cycles', authWithRefresh, thermostatController.getDailyCycles);
 // Get hourly cycle counts and runtime by thermostat IP
 router.get('/thermostat/:ip/hourly-cycles', authWithRefresh, thermostatController.getHourlyCycles);
-// Get thermostat settings change log
-router.get('/thermostat/:ip/settings-log', authWithRefresh, thermostatController.getSettingsLog);
 
 // Sensor Settings
 router.get('/sensor/:ip', authWithRefresh, thermostatController.getSensorSettings);
